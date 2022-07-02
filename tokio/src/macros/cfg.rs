@@ -67,6 +67,26 @@ macro_rules! cfg_fs {
     }
 }
 
+macro_rules! cfg_no_sim {
+    ($($item:item)*) => {
+        $(
+            #[cfg(not(feature = "sim"))]
+            #[cfg_attr(docsrs, doc(cfg(not(feature = "sim"))))]
+            $item
+        )*
+    }
+}
+
+macro_rules! cfg_sim {
+    ($($item:item)*) => {
+        $(
+            #[cfg(feature = "sim")]
+            #[cfg_attr(docsrs, doc(cfg(feature = "sim")))]
+            $item
+        )*
+    }
+}
+
 macro_rules! cfg_io_blocking {
     ($($item:item)*) => {
         $( #[cfg(any(feature = "io-std", feature = "fs"))] $item )*

@@ -246,6 +246,7 @@ cfg_rt! {
     use std::future::Future;
     use std::time::Duration;
 
+
     /// The Tokio runtime.
     ///
     /// The runtime provides an I/O driver, task scheduler, [timer], and
@@ -306,6 +307,46 @@ cfg_rt! {
         #[cfg(feature = "rt-multi-thread")]
         ThreadPool(ThreadPool),
     }
+
+    cfg_sim! {
+        impl Kind {
+            fn poll_time_events(&self) {
+                self.with_time(|| {
+                    TimeDriver::with_current(|mut driver|
+                        driver.take_timestep().into_iter().for_each(|w| w.wake())
+                    );
+                })
+            }
+
+            fn next_time_poll(&self) -> Option<SimTime> {
+                self.with_time(|| {
+                    TimeDriver::with_current(|c| c.next_wakeup())
+                })
+            }
+
+            fn poll_until_idle(&self) {
+                match self {
+                    Self::CurrentThread(ref sched) => sched.poll_until_idle(),
+                    _ => unreachable!()
+                }
+            }
+
+            fn block_or_idle_on<F: Future>(&self, f: F) -> Result<F::Output, RuntimeIdle> {
+                match self {
+                    Self::CurrentThread(ref sched) => sched.block_or_idle_on(f),
+                    _ => unreachable!()
+                }
+            }
+
+            fn with_time<R>(&self, f: impl FnOnce() -> R) -> R {
+                match self {
+                    Self::CurrentThread(ref sched) => sched.with_time(f),
+                    _ => unreachable!()
+                }
+            }
+        }
+    }
+
 
     /// After thread starts / before thread stops
     type Callback = std::sync::Arc<dyn Fn() + Send + Sync>;
@@ -592,6 +633,58 @@ cfg_rt! {
             self.shutdown_timeout(Duration::from_nanos(0))
         }
     }
+
+    cfg_sim! {
+        use crate::sim::*;
+        use basic_scheduler::RuntimeIdle;
+
+        impl Runtime {
+            // # SIM ADDITIONS
+
+            ///
+            /// Polls all time events from the time context
+            /// based on the current state of `SimTime::now`.
+            ///
+            /// The current context is either the time context
+            /// stored in the local scheduler, or if this is None
+            /// the time context that is currently active from another source.
+            ///
+            pub fn poll_time_events(&self) {
+                self.kind.poll_time_events()
+            }
+
+            ///
+            /// Returns the next point in time that expects a
+            /// call of `poll_time_events`. If None no
+            /// primitves has any time dependent wait behaviour.
+            ///
+            pub fn next_time_poll(&self) -> Option<SimTime> {
+                self.kind.next_time_poll()
+            }
+
+            ///
+            /// Polls all tasks on the local scheduler until all of them
+            /// are either completed or idle without chance of further progress.
+            ///
+            pub fn poll_until_idle(&self) {
+                self.with_time(|| self.kind.poll_until_idle())
+            }
+
+            ///
+            /// This call is similar to ``block_on` with the difference
+            /// that this call returns an error should all tasks be idle
+            /// but the future is still pending.
+            ///
+            pub fn block_or_idle_on<F: Future>(&self, f: F) -> Result<F::Output, RuntimeIdle> {
+                self.with_time(|| self.kind.block_or_idle_on(f))
+            }
+
+            fn with_time<R>(&self, f: impl FnOnce() -> R) -> R {
+                self.kind.with_time(f)
+            }
+        }
+    }
+
 
     #[allow(clippy::single_match)] // there are comments in the error branch, so we don't want if-let
     impl Drop for Runtime {

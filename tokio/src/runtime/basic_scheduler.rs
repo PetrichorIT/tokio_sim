@@ -24,6 +24,9 @@ pub(crate) struct BasicScheduler {
     /// Core scheduler data is acquired by a thread entering `block_on`.
     core: AtomicCell<Core>,
 
+    #[cfg(feature = "sim")]
+    time_driver: AtomicCell<crate::sim::TimeDriver>,
+
     /// Notifier for waking up other threads to steal the
     /// driver.
     notify: Notify,
@@ -160,6 +163,9 @@ impl BasicScheduler {
             notify: Notify::new(),
             spawner,
             context_guard: None,
+
+            #[cfg(feature = "sim")]
+            time_driver: AtomicCell::new(Some(Box::new(TimeDriver::new()))),
         }
     }
 
@@ -217,6 +223,83 @@ impl BasicScheduler {
 
     pub(super) fn set_context_guard(&mut self, guard: EnterGuard) {
         self.context_guard = Some(guard);
+    }
+}
+
+cfg_sim! {
+    use crate::sim::TimeDriver;
+
+    impl BasicScheduler {
+        pub(super) fn with_time<R>(&self, f: impl FnOnce() -> R) -> R {
+            if let Some(out_driver) = self.time_driver.take() {
+                let other_driver = TimeDriver::swap_context(out_driver);
+
+                let ret = f();
+
+                if let Some(other_driver) = other_driver {
+                    let our_driver =
+                        TimeDriver::swap_context(other_driver).expect("Somebody stole our driver");
+                    self.time_driver.set(our_driver);
+                } else {
+                    let our_driver = TimeDriver::unset_context();
+                    self.time_driver.set(our_driver);
+                }
+                ret
+            } else {
+                if TimeDriver::is_context_set() {
+                    println!("Warning: Reusing time driver allready in context, missing own driver.");
+                    f()
+                } else {
+                    panic!("Not time driver found")
+                }
+            }
+        }
+
+        #[track_caller]
+        pub(super) fn poll_until_idle(&self) {
+            loop {
+                if let Some(core) = self.take_core() {
+                    return core.poll_until_idle();
+                } else {
+                    panic!("Could not take core in simulation context");
+                }
+            }
+        }
+
+        pub(super) fn block_or_idle_on<F: Future>(&self, future: F) -> Result<F::Output, RuntimeIdle> {
+            pin!(future);
+
+        // Attempt to steal the scheduler core and block_on the future if we can
+        // there, otherwise, lets select on a notification that the core is
+        // available or the future is complete.
+        loop {
+            if let Some(core) = self.take_core() {
+                return core.block_or_idle_on(future);
+            } else {
+                let mut enter = crate::runtime::enter(false);
+
+                let notified = self.notify.notified();
+                pin!(notified);
+
+                if let Some(out) = enter
+                    .block_on(poll_fn(|cx| {
+                        if notified.as_mut().poll(cx).is_ready() {
+                            return Ready(None);
+                        }
+
+                        if let Ready(out) = future.as_mut().poll(cx) {
+                            return Ready(Some(out));
+                        }
+
+                        Pending
+                    }))
+                    .expect("Failed to `Enter::block_on`")
+                {
+                    return Ok(out);
+                }
+            }
+        }
+        }
     }
 }
 
@@ -618,6 +701,150 @@ impl CoreGuard<'_> {
     }
 }
 
+cfg_sim! {
+    impl CoreGuard<'_> {
+        #[track_caller]
+        fn poll_until_idle(self) {
+            self.enter(|mut core, context| {
+                let _enter = crate::runtime::enter(false);
+                // Future must not be pinned since there is no future
+                'outer: loop {
+                    // Progress counter
+                    let mut c = 0;
+                    for _i in 0..10 {
+                        // Make sure we didn't hit an unhandled_panic
+                        if core.unhandled_panic {
+                            return (core, ());
+                        }
+
+                        // Get and increment the current tick
+                        let tick = core.tick;
+                        core.tick = core.tick.wrapping_add(1);
+
+                        // if tick % core.spawner.shared.config.global_queue_interval == 0
+                        let entry = if tick % 5 == 0 {
+                            core.spawner.pop().or_else(|| core.tasks.pop_front())
+                        } else {
+                            core.tasks.pop_front().or_else(|| core.spawner.pop())
+                        };
+
+                        let task = match entry {
+                            Some(entry) => entry,
+                            None => {
+                                // If `entry` is None, the core queue and the spawner queue
+                                // is empty. Since only those queues exists in a single threaded
+                                // runtime, and time sensitive calls to [Waker] are occure
+                                // only by using another [CoreGuard] from a [Runtime]
+                                // this empty status is guaranteed to remaing until this call ends.
+
+                                // As told this is very likly a deadlock
+                                // However make another iteration if work was done in this current
+                                // iteration, to perpare for later edge cases and to handle
+                                // unhandled panics
+                                if c == 0  {
+                                    return (core, ());
+                                } else {
+                                    continue 'outer;
+                                }
+                            }
+                        };
+                        let task = context.spawner.shared.owned.assert_owner(task);
+                        let (c, _) = context.run_task(core, || {
+                            c += 1;
+                            task.run();
+                        });
+                        core = c;
+                    }
+                }
+            });
+        }
+
+        #[track_caller]
+        fn block_or_idle_on<F: Future>(self, future: F) -> Result<F::Output, RuntimeIdle> {
+            let ret = self.enter(|mut core, context| {
+                let _enter = crate::runtime::enter(false);
+                let waker = context.spawner.waker_ref();
+                let mut cx = std::task::Context::from_waker(&waker);
+
+                pin!(future);
+
+                'outer: loop {
+                    // Progress count
+                    let mut c = 0;
+
+                    if core.spawner.reset_woken() {
+                        let (c, res) = {
+                            c += 1;
+                            context.enter(core, || future.as_mut().poll(&mut cx))
+                        };
+
+                        core = c;
+
+                        if let Ready(v) = res {
+                            return (core, Some(v));
+                        }
+                    }
+
+                    //for _ in 0..core.spawner.shared.config.event_interval
+
+                    let i_max = 10;
+                    for _i in 0..i_max {
+                        // Make sure we didn't hit an unhandled_panic
+                        if core.unhandled_panic {
+                            return (core, None);
+                        }
+
+                        // Get and increment the current tick
+                        let tick = core.tick;
+                        core.tick = core.tick.wrapping_add(1);
+
+                        // if tick % core.spawner.shared.config.global_queue_interval == 0
+                        let entry = if tick % 5 == 0 {
+                            core.spawner.pop().or_else(|| core.tasks.pop_front())
+                        } else {
+                            core.tasks.pop_front().or_else(|| core.spawner.pop())
+                        };
+
+                        let task = match entry {
+                            Some(entry) => entry,
+                            None => {
+
+                                // This should act as a deadlock detection.
+                                if c == 0  {
+                                    return (core, None);
+                                } else {
+                                    continue 'outer;
+                                }
+                            }
+                        };
+
+                        let task = context.spawner.shared.owned.assert_owner(task);
+
+                        let (c, _) = context.run_task(core, || {
+                            c += 1;
+                            task.run();
+                        });
+                        core = c;
+                    }
+
+                    // Yield to the driver, this drives the timer and pulls any
+                    // pending I/O events.
+                    core = context.park_yield(core);
+                }
+            });
+
+        match ret {
+            Some(ret) => Ok(ret),
+            None => {
+                // `block_on` panicked.
+                return Err(RuntimeIdle::new());
+                // panic!("a spawned task panicked and the runtime is configured to shut down on unhandled panic");
+            }
+        }
+        }
+    }
+}
+
 impl Drop for CoreGuard<'_> {
     fn drop(&mut self) {
         if let Some(core) = self.context.core.borrow_mut().take() {
@@ -629,4 +856,25 @@ impl Drop for CoreGuard<'_> {
             self.basic_scheduler.notify.notify_one()
         }
     }
+}
+
+cfg_sim! {
+    /// The runtime is idle now.
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    pub struct RuntimeIdle(());
+
+    impl RuntimeIdle {
+        pub fn new() -> RuntimeIdle {
+            RuntimeIdle(())
+        }
+    }
+
+    impl fmt::Display for RuntimeIdle {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "RuntimeIdle")
+        }
+    }
+
+    impl std::error::Error for RuntimeIdle {}
+
 }

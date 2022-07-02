@@ -450,10 +450,17 @@ cfg_rt! {
 }
 
 cfg_time! {
+    #[cfg(not(feature = "sim"))]
     pub mod time;
+
+    #[cfg(feature = "sim")]
+    pub use crate::sim as time;
 }
 
 mod util;
+
+#[cfg(feature = "sim")]
+pub mod sim;
 
 /// Due to the `Stream` trait's inclusion in `std` landing later than Tokio's 1.0
 /// release, most of the Tokio stream utilities have been moved into the [`tokio-stream`]

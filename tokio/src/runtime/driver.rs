@@ -98,29 +98,52 @@ cfg_not_process_driver! {
 // ===== time driver =====
 
 cfg_time! {
-    type TimeDriver = crate::park::either::Either<crate::time::driver::Driver<IoStack>, IoStack>;
+    cfg_sim! {
+        // TODO:
+        // Think about integrating simtime into the standard time interface
+        type TimeDriver = IoStack;
 
-    pub(crate) type Clock = crate::time::Clock;
-    pub(crate) type TimeHandle = Option<crate::time::driver::Handle>;
+        pub(crate) type Clock = ();
+        pub(crate) type TimeHandle = ();
 
-    fn create_clock(enable_pausing: bool, start_paused: bool) -> Clock {
-        crate::time::Clock::new(enable_pausing, start_paused)
+        fn create_clock(_enable_pausing: bool, _start_paused: bool) -> Clock {
+            ()
+        }
+
+        fn create_time_driver(
+            _enable: bool,
+            io_stack: IoStack,
+            _clock: Clock,
+        ) -> (TimeDriver, TimeHandle) {
+            (io_stack, ())
+        }
     }
 
-    fn create_time_driver(
-        enable: bool,
-        io_stack: IoStack,
-        clock: Clock,
-    ) -> (TimeDriver, TimeHandle) {
-        use crate::park::either::Either;
+    cfg_no_sim! {
+        type TimeDriver = crate::park::either::Either<crate::time::driver::Driver<IoStack>, IoStack>;
 
-        if enable {
-            let driver = crate::time::driver::Driver::new(io_stack, clock);
-            let handle = driver.handle();
+        pub(crate) type Clock = crate::time::Clock;
+        pub(crate) type TimeHandle = Option<crate::time::driver::Handle>;
 
-            (Either::A(driver), Some(handle))
-        } else {
-            (Either::B(io_stack), None)
+        fn create_clock(enable_pausing: bool, start_paused: bool) -> Clock {
+            crate::time::Clock::new(enable_pausing, start_paused)
+        }
+
+        fn create_time_driver(
+            enable: bool,
+            io_stack: IoStack,
+            clock: Clock,
+        ) -> (TimeDriver, TimeHandle) {
+            use crate::park::either::Either;
+
+            if enable {
+                let driver = crate::time::driver::Driver::new(io_stack, clock);
+                let handle = driver.handle();
+
+                (Either::A(driver), Some(handle))
+            } else {
+                (Either::B(io_stack), None)
+            }
         }
     }
 }

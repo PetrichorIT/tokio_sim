@@ -49,6 +49,7 @@ cfg_signal_internal! {
 }
 
 cfg_time! {
+    #[allow(unused)]
     pub(crate) fn time_handle() -> crate::runtime::driver::TimeHandle {
         match CONTEXT.try_with(|ctx| {
             let ctx = ctx.borrow();
@@ -60,6 +61,7 @@ cfg_time! {
     }
 
     cfg_test_util! {
+        #[allow(unused)]
         pub(crate) fn clock() -> Option<crate::runtime::driver::Clock> {
             match CONTEXT.try_with(|ctx| (*ctx.borrow()).as_ref().map(|ctx| ctx.as_inner().clock.clone())) {
                 Ok(clock) => clock,

@@ -81,6 +81,7 @@ cfg_trace! {
 }
 cfg_time! {
     #[track_caller]
+    #[allow(unused)]
     pub(crate) fn caller_location() -> Option<&'static std::panic::Location<'static>> {
         #[cfg(all(tokio_unstable, feature = "tracing"))]
         return Some(std::panic::Location::caller());
