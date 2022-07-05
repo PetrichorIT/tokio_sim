@@ -234,7 +234,7 @@ cfg_rt! {
 }
 
 cfg_rt_multi_thread! {
-    use driver::Driver;
+    use self::driver::Driver;
 
     pub(crate) mod thread_pool;
     use self::thread_pool::ThreadPool;
@@ -299,6 +299,7 @@ cfg_rt! {
 
     /// The runtime executor is either a thread-pool or a current-thread executor.
     #[derive(Debug)]
+    #[non_exhaustive]
     enum Kind {
         /// Execute all tasks on the current-thread.
         CurrentThread(BasicScheduler),
@@ -309,19 +310,24 @@ cfg_rt! {
     }
 
     cfg_sim! {
+        use crate::sim::driver::Handle as TimeHandle;
+
+        #[allow(unused)]
         impl Kind {
+
+            fn time_handle(&self) -> TimeHandle {
+                match self {
+                    Self::CurrentThread(ref sched) => sched.time_handle(),
+                    _ => unreachable!(),
+                }
+            }
+
             fn poll_time_events(&self) {
-                self.with_time(|| {
-                    TimeDriver::with_current(|mut driver|
-                        driver.take_timestep().into_iter().for_each(|w| w.wake())
-                    );
-                })
+                self.time_handle().process_now()
             }
 
             fn next_time_poll(&self) -> Option<SimTime> {
-                self.with_time(|| {
-                    TimeDriver::with_current(|c| c.next_wakeup())
-                })
+                self.time_handle().next_time_poll()
             }
 
             fn poll_until_idle(&self) {
@@ -385,6 +391,12 @@ cfg_rt! {
         #[cfg_attr(docsrs, doc(cfg(feature = "rt-multi-thread")))]
         pub fn new() -> std::io::Result<Runtime> {
             Builder::new_multi_thread().enable_all().build()
+        }
+
+        /// Creates a sim runtime
+        #[cfg(not(feature = "rt-multi-thread"))]
+        pub fn new() -> std::io::Result<Runtime> {
+            Builder::new_current_thread().enable_time().build()
         }
 
         /// Returns a handle to the runtime's spawner.
@@ -650,7 +662,10 @@ cfg_rt! {
             /// the time context that is currently active from another source.
             ///
             pub fn poll_time_events(&self) {
-                self.kind.poll_time_events()
+                let _enter = self.enter();
+                self.kind.poll_time_events();
+
+                drop(_enter)
             }
 
             ///
@@ -659,7 +674,11 @@ cfg_rt! {
             /// primitves has any time dependent wait behaviour.
             ///
             pub fn next_time_poll(&self) -> Option<SimTime> {
-                self.kind.next_time_poll()
+                let _enter = self.enter();
+                let ret = self.kind.next_time_poll();
+
+                drop(_enter);
+                ret
             }
 
             ///
@@ -667,7 +686,10 @@ cfg_rt! {
             /// are either completed or idle without chance of further progress.
             ///
             pub fn poll_until_idle(&self) {
-                self.with_time(|| self.kind.poll_until_idle())
+                let _enter = self.enter();
+                self.kind.poll_until_idle();
+
+                drop(_enter);
             }
 
             ///
@@ -676,7 +698,11 @@ cfg_rt! {
             /// but the future is still pending.
             ///
             pub fn block_or_idle_on<F: Future>(&self, f: F) -> Result<F::Output, RuntimeIdle> {
-                self.with_time(|| self.kind.block_or_idle_on(f))
+                let _enter = self.enter();
+                let ret = self.kind.block_or_idle_on(f);
+
+                drop(_enter);
+                ret
             }
 
             fn with_time<R>(&self, f: impl FnOnce() -> R) -> R {

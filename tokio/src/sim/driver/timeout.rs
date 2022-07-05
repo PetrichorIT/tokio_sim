@@ -4,7 +4,7 @@
 //!
 //! [`Timeout`]: struct@Timeout
 
-use crate::time::{sleep_until, Duration, SimTime, Sleep};
+use crate::sim::{sleep_until, Duration, SimTime, Sleep, error::*};
 
 use pin_project_lite::pin_project;
 use std::future::Future;
@@ -182,26 +182,3 @@ where
     }
 }
 
-/// Errors returned by `Timeout`.
-#[derive(Debug, PartialEq)]
-pub struct Elapsed(());
-
-impl Elapsed {
-    pub(crate) fn new() -> Self {
-        Elapsed(())
-    }
-}
-
-impl std::fmt::Display for Elapsed {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        "deadline has elapsed".fmt(fmt)
-    }
-}
-
-impl std::error::Error for Elapsed {}
-
-impl From<Elapsed> for std::io::Error {
-    fn from(_err: Elapsed) -> std::io::Error {
-        std::io::ErrorKind::TimedOut.into()
-    }
-}

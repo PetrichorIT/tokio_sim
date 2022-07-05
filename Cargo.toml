@@ -6,6 +6,7 @@ members = [
   "tokio-test",
   "tokio-stream",
   "tokio-util",
+  "tokio-sim",
 
   # Internal
   "benches",

@@ -24,9 +24,6 @@ pub(crate) struct BasicScheduler {
     /// Core scheduler data is acquired by a thread entering `block_on`.
     core: AtomicCell<Core>,
 
-    #[cfg(feature = "sim")]
-    time_driver: AtomicCell<crate::sim::TimeDriver>,
-
     /// Notifier for waking up other threads to steal the
     /// driver.
     notify: Notify,
@@ -163,15 +160,18 @@ impl BasicScheduler {
             notify: Notify::new(),
             spawner,
             context_guard: None,
-
-            #[cfg(feature = "sim")]
-            time_driver: AtomicCell::new(Some(Box::new(TimeDriver::new()))),
         }
     }
 
     pub(crate) fn spawner(&self) -> &Spawner {
         &self.spawner
     }
+    
+    #[cfg(feature = "sim")]
+    pub(super) fn time_handle(&self) -> crate::sim::driver::Handle {
+        self.spawner.shared.handle_inner.time_handle.as_ref().unwrap().clone()
+    }
+
 
     #[track_caller]
     pub(crate) fn block_on<F: Future>(&self, future: F) -> F::Output {
@@ -227,32 +227,10 @@ impl BasicScheduler {
 }
 
 cfg_sim! {
-    use crate::sim::TimeDriver;
-
     impl BasicScheduler {
         pub(super) fn with_time<R>(&self, f: impl FnOnce() -> R) -> R {
-            if let Some(out_driver) = self.time_driver.take() {
-                let other_driver = TimeDriver::swap_context(out_driver);
-
-                let ret = f();
-
-                if let Some(other_driver) = other_driver {
-                    let our_driver =
-                        TimeDriver::swap_context(other_driver).expect("Somebody stole our driver");
-                    self.time_driver.set(our_driver);
-                } else {
-                    let our_driver = TimeDriver::unset_context();
-                    self.time_driver.set(our_driver);
-                }
-                ret
-            } else {
-                if TimeDriver::is_context_set() {
-                    println!("Warning: Reusing time driver allready in context, missing own driver.");
-                    f()
-                } else {
-                    panic!("Not time driver found")
-                }
-            }
+            // Hope for time context
+            f()
         }
 
         #[track_caller]

@@ -4,7 +4,9 @@ use std::pin::Pin;
 use std::sync::atomic::AtomicUsize;
 use std::task::{Context, Poll};
 
-use crate::time::{Duration, SimTime, TimeDriver};
+use super::Handle;
+use super::queue::{TimeSlotEntry, TimeSlotEntryHandle};
+use crate::sim::{Duration, SimTime};
 use pin_project_lite::pin_project;
 
 /// Waits until `deadline` is reached.
@@ -218,13 +220,15 @@ pin_project! {
     pub struct Sleep {
         pub(crate) deadline: SimTime,
         pub(crate) id: usize,
+    
+        pub(super) handle: Option<TimeSlotEntryHandle>,
     }
 }
 
 impl Sleep {
     pub(crate) fn new_timeout(deadline: SimTime) -> Sleep {
         let next = SLEEP_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        Sleep { deadline, id: next }
+        Sleep { deadline, id: next, handle: None }
     }
 
     pub(crate) fn far_future() -> Sleep {
@@ -278,9 +282,11 @@ impl Sleep {
 
     fn reset_inner(self: Pin<&mut Self>, deadline: SimTime) {
         let me = self.project();
-        // Reogranize timer calls.
-        TimeDriver::with_current(|mut driver| driver.reset_sleeper(*me.id, deadline));
-        *me.deadline = deadline;
+        if let Some(handle) = me.handle.take() {
+            // Reogranize timer calls.
+            handle.reset(deadline);
+            *me.deadline = deadline;
+        }
     }
 }
 
@@ -288,10 +294,17 @@ impl Future for Sleep {
     type Output = ();
 
     fn poll(self: std::pin::Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.deadline.cmp(&SimTime::now()) {
+        let me = self.project();
+
+        match (*me.deadline).cmp(&SimTime::now()) {
             Ordering::Greater => {
                 // Setup waker
-                TimeDriver::with_current(|mut driver| driver.wake_sleeper(&self, cx));
+                // TimeDriver::with_current(|mut driver| driver.wake_sleeper(&self, cx));
+                let handle = Handle::current().get().lock().queue.push(
+                    TimeSlotEntry { id: *me.id, waker: cx.waker().clone() }, 
+                    *me.deadline
+                );
+                *me.handle = Some(handle);
                 Poll::Pending
             }
             Ordering::Equal => Poll::Ready(()),

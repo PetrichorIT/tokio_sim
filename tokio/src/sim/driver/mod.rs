@@ -1,9 +1,11 @@
+use super::clock::Clock;
+use super::Duration;
 use super::SimTime;
-use std::cell::Cell;
-use std::cell::{RefCell, RefMut};
-use std::collections::BinaryHeap;
-use std::ops::DerefMut;
-use std::task::{Context, Waker};
+use crate::loom::sync::{atomic::*, Arc, Mutex};
+use crate::park::{Park, Unpark};
+
+pub(crate) mod handle;
+pub(crate) use handle::*;
 
 mod sleep;
 pub use sleep::*;
@@ -14,142 +16,184 @@ pub use interval::*;
 mod timeout;
 pub use timeout::*;
 
-thread_local! {
-    pub(crate) static TIME_DRIVER: RefCell<Option<Box<TimeDriver>>> = RefCell::new(None);
+mod queue;
+use queue::*;
+
+#[derive(Debug)]
+pub(crate) struct Driver<P: Park + 'static> {
+    /// Timing backend in use.
+    #[allow(unused)]
+    time_source: ClockTime,
+
+    /// Shared state.
+    handle: Handle,
+
+    /// Delegate
+    #[allow(unused)]
+    park: P,
 }
 
-#[derive(Debug, Default)]
-pub(crate) struct TimeDriver {
-    sleeps: BinaryHeap<Entry>,
-    next_wakeup_emitted: Cell<Option<SimTime>>,
+impl<P: Park + 'static> Driver<P> {
+    pub(crate) fn new(park: P, clock: Clock) -> Driver<P> {
+        let time_source = ClockTime::new(clock);
+        let inner = Inner::new(time_source.clone(), Box::new(park.unpark()));
+
+        Driver {
+            time_source,
+            handle: Handle::new(Arc::new(inner)),
+            park,
+        }
+    }
+
+    pub(crate) fn handle(&self) -> Handle {
+        self.handle.clone()
+    }
+
+    pub(self) fn park_internal(&self, _v: Option<Duration>) -> Result<(), <Self as Park>::Error> {
+        // NOP
+        Ok(())
+    }
 }
 
-unsafe impl Send for TimeDriver {}
-unsafe impl Sync for TimeDriver {}
-
-impl TimeDriver {
-    pub(crate) fn new() -> Self {
-        Self::default()
+impl Handle {
+    pub(crate) fn next_time_poll(&self) -> Option<SimTime> {
+        self.get().lock().queue.next_wakeup()
     }
 
-    pub(crate) fn swap_context(new_driver: Box<TimeDriver>) -> Option<Box<TimeDriver>> {
-        TIME_DRIVER.with(|driver| driver.borrow_mut().replace(new_driver))
+    pub(crate) fn process_now(&self) {
+        let now = SimTime::now();
+        self.process_at(now)
     }
 
-    pub(crate) fn is_context_set() -> bool {
-        TIME_DRIVER.with(|b| b.borrow().is_some())
+    pub(crate) fn process_at(&self, now: SimTime) {
+        // fetch the slot for the current timepoint.
+        let lock = self.get().lock();
+   
+        for time_slot in lock.queue.pop(now) {
+            time_slot.wake_all();
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+#[allow(unused)]
+pub(self) struct ClockTime {
+    clock: super::clock::Clock,
+    start_time: SimTime,
+}
+
+impl ClockTime {
+    pub(self) fn new(clock: Clock) -> Self {
+        Self {
+            start_time: clock.now(),
+            clock,
+        }
+    }
+}
+
+/// Timer state shared between `Driver`, `Handle`, and `Registration`.
+struct Inner {
+    // The state is split like this so `Handle` can access `is_shutdown` without locking the mutex
+    pub(super) state: Mutex<InnerState>,
+
+    pub(super) is_shutdown: AtomicBool,
+}
+
+impl Inner {
+    pub(super) fn new(time_source: ClockTime, unpark: Box<dyn Unpark>) -> Inner {
+        Inner {
+            state: Mutex::new(InnerState {
+                time_source,
+                queue: Arc::new(TimerQueue::new(SimTime::now())),
+                unpark,
+            }),
+            is_shutdown: AtomicBool::new(false),
+        }
     }
 
-    pub(crate) fn unset_context() -> Box<TimeDriver> {
-        TIME_DRIVER
-            .with(|driver| driver.borrow_mut().take())
-            .expect("Failed to fetch driver from current context")
+    /// Locks the driver's inner structure
+    pub(super) fn lock(&self) -> crate::loom::sync::MutexGuard<'_, InnerState> {
+        self.state.lock()
     }
 
-    pub(crate) fn wake_sleeper(&mut self, source: &Sleep, cx: &mut Context<'_>) {
-        assert!(source.deadline >= SimTime::now());
+    // Check whether the driver has been shutdown
+    pub(super) fn is_shutdown(&self) -> bool {
+        self.is_shutdown.load(Ordering::SeqCst)
+    }
+}
 
-        if self.sleeps.iter().any(|e| e.id == source.id) {
+/// Time state shared which must be protected by a `Mutex`
+struct InnerState {
+    /// Timing backend in use.
+    #[allow(unused)]
+    time_source: ClockTime,
+
+    // Timer queue to handle wakeups
+    queue: Arc<TimerQueue>,
+
+    #[allow(unused)]
+    unpark: Box<dyn Unpark>,
+}
+
+impl<P> Park for Driver<P>
+where
+    P: Park + 'static,
+{
+    type Unpark = TimerUnpark<P>;
+    type Error = P::Error;
+
+    fn unpark(&self) -> Self::Unpark {
+        TimerUnpark::new(self)
+    }
+
+    fn park(&mut self) -> Result<(), Self::Error> {
+        self.park_internal(None)
+    }
+
+    fn park_timeout(&mut self, duration: Duration) -> Result<(), Self::Error> {
+        self.park_internal(Some(duration))
+    }
+
+    fn shutdown(&mut self) {
+        if self.handle.is_shutdown() {
             return;
         }
 
-        self.sleeps.push(Entry {
-            deadline: source.deadline,
-            id: source.id,
-            waker: cx.waker().clone(),
-        })
-    }
+        self.handle.get().is_shutdown.store(true, Ordering::SeqCst);
 
-    pub(crate) fn reset_sleeper(&mut self, id: usize, new_deadline: SimTime) {
-        let mut heap = BinaryHeap::new();
-        std::mem::swap(&mut heap, &mut self.sleeps);
+        // Advance time forward to the end of time.
 
-        let mut drained_heap = heap.into_vec();
-        if let Some(entry) = drained_heap.iter_mut().find(|v| v.id == id) {
-            entry.deadline = new_deadline
-        } else {
-            // panic!("Unknown sleeper")
-        }
+        self.handle.process_at(SimTime::MAX);
 
-        let mut new_heap = BinaryHeap::from(drained_heap);
-        std::mem::swap(&mut new_heap, &mut self.sleeps);
-        // drop(new_heap) == drop(heap) == drop(BinaryHeap::new())
-    }
-
-    pub(crate) fn with_current<R>(f: impl FnOnce(RefMut<'_, Self>) -> R) -> R {
-        TIME_DRIVER.with(|c| {
-            let driver = RefMut::map(c.borrow_mut(), |v| {
-                v.as_mut()
-                    .expect("Failed to take driver from current context")
-                    .deref_mut() // to resolve the boxing
-            });
-
-            // Execute function with time driver.
-            f(driver)
-        })
-    }
-
-    pub(crate) fn next_wakeup(&self) -> Option<SimTime> {
-        let c = self.sleeps.peek().map(|v| v.deadline);
-        match (c, self.next_wakeup_emitted.get()) {
-            // Nothing to emit
-            (None, _) => None,
-            // If we want to emit the same data again dont do it
-            // TODO: maybe some checks with SimTime::now() ?
-            (Some(c), Some(p)) if p == c => None,
-            // This case catches prev == None in which case we are at inital set
-            // or prev == Some(p) with p < or greater that c
-            // greates is not possible so smaller so overwite the emit
-            // an reemit the event
-            _ => {
-                // Inital set or overwrite ste
-                self.next_wakeup_emitted.set(c);
-                c
-            }
-        }
-    }
-
-    pub(crate) fn take_timestep(&mut self) -> Vec<Waker> {
-        let mut wakers = Vec::new();
-
-        while let Some(peeked) = self.sleeps.peek() {
-            if peeked.deadline == SimTime::now() {
-                wakers.push(self.sleeps.pop().unwrap().waker)
-            } else {
-                break;
-            }
-        }
-
-        wakers
+        self.park.shutdown();
     }
 }
 
-#[derive(Debug)]
-struct Entry {
-    deadline: SimTime,
-    waker: Waker,
-    id: usize,
-}
-
-impl PartialEq for Entry {
-    fn eq(&self, other: &Self) -> bool {
-        self.deadline == other.deadline && self.id == other.id
+impl<P> Drop for Driver<P>
+where
+    P: Park + 'static,
+{
+    fn drop(&mut self) {
+        self.shutdown();
     }
 }
 
-impl Eq for Entry {}
-
-impl PartialOrd for Entry {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
+pub(crate) struct TimerUnpark<P: Park + 'static> {
+    inner: P::Unpark,
 }
 
-impl Ord for Entry {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match self.id == other.id {
-            true => std::cmp::Ordering::Equal,
-            _ => other.deadline.cmp(&self.deadline),
+impl<P: Park + 'static> TimerUnpark<P> {
+    fn new(driver: &Driver<P>) -> TimerUnpark<P> {
+        TimerUnpark {
+            inner: driver.park.unpark(),
+
         }
     }
 }
+
+impl<P: Park + 'static> Unpark for TimerUnpark<P> {
+    fn unpark(&self) {
+        self.inner.unpark();
+    }
+}
+

@@ -101,21 +101,30 @@ cfg_time! {
     cfg_sim! {
         // TODO:
         // Think about integrating simtime into the standard time interface
-        type TimeDriver = IoStack;
+        type TimeDriver = crate::park::either::Either<crate::sim::driver::Driver<IoStack>, IoStack>;
 
-        pub(crate) type Clock = ();
-        pub(crate) type TimeHandle = ();
+        pub(crate) type Clock = crate::sim::clock::Clock;
+        pub(crate) type TimeHandle = Option<crate::sim::driver::Handle>;
 
-        fn create_clock(_enable_pausing: bool, _start_paused: bool) -> Clock {
-            ()
+        fn create_clock(enable_pausing: bool, start_paused: bool) -> Clock {
+            crate::time::clock::Clock::new(enable_pausing, start_paused)
         }
 
         fn create_time_driver(
-            _enable: bool,
+            enable: bool,
             io_stack: IoStack,
-            _clock: Clock,
+            clock: Clock,
         ) -> (TimeDriver, TimeHandle) {
-            (io_stack, ())
+            use crate::park::either::Either;
+
+            if enable {
+                let driver = crate::time::driver::Driver::new(io_stack, clock);
+                let handle = driver.handle();
+
+                (Either::A(driver), Some(handle))
+            } else {
+                (Either::B(io_stack), None)
+            }
         }
     }
 
