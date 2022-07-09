@@ -16,6 +16,13 @@ pub(crate) static SIMTIME_NOW: SyncWrapper<Cell<SimTime>> =
 pub struct SimTime(pub(super) Duration);
 
 impl SimTime {
+    ///
+    /// Creates a raw simtime from a duration
+    ///
+    pub fn from_std(dur: Duration) -> Self {
+        Self(dur)
+    }
+
     /// Returns an instant corresponding to "now" in the simulation context.
     ///
     /// # Examples
