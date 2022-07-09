@@ -6,7 +6,6 @@ members = [
   "tokio-test",
   "tokio-stream",
   "tokio-util",
-  "tokio-sim",
 
   # Internal
   "benches",
@@ -14,4 +13,8 @@ members = [
   "stress-test",
   "tests-build",
   "tests-integration",
+]
+
+exclude = [
+    "tokio-sim"
 ]

@@ -408,7 +408,10 @@ cfg_fs! {
 mod future;
 
 pub mod io;
-pub mod net;
+
+cfg_no_sim! {
+    pub mod net;
+}
 
 mod loom;
 mod park;

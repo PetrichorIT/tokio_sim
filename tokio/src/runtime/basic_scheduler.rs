@@ -228,10 +228,6 @@ impl BasicScheduler {
 
 cfg_sim! {
     impl BasicScheduler {
-        pub(super) fn with_time<R>(&self, f: impl FnOnce() -> R) -> R {
-            // Hope for time context
-            f()
-        }
 
         #[track_caller]
         pub(super) fn poll_until_idle(&self) {

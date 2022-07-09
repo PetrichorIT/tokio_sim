@@ -343,13 +343,6 @@ cfg_rt! {
                     _ => unreachable!()
                 }
             }
-
-            fn with_time<R>(&self, f: impl FnOnce() -> R) -> R {
-                match self {
-                    Self::CurrentThread(ref sched) => sched.with_time(f),
-                    _ => unreachable!()
-                }
-            }
         }
     }
 
@@ -703,10 +696,6 @@ cfg_rt! {
 
                 drop(_enter);
                 ret
-            }
-
-            fn with_time<R>(&self, f: impl FnOnce() -> R) -> R {
-                self.kind.with_time(f)
             }
         }
     }
