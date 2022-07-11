@@ -62,16 +62,12 @@ impl Handle {
 
     pub(crate) fn process_now(&self) {
         let now = SimTime::now();
-        println!("[0] now = {}", now);
         self.process_at(now)
     }
 
     pub(crate) fn process_at(&self, now: SimTime) {
         // fetch the slot for the current timepoint.
-        println!("[1] now = {}", now);
         let lock = self.get().lock();
-
-        println!("[2] SimTime::now() = {}, now = {}", SimTime::now(), now);
 
         for time_slot in lock.ctx.queue.pop(now) {
             time_slot.wake_all();
@@ -176,7 +172,8 @@ where
 
         // Advance time forward to the end of time.
 
-        self.handle.process_at(SimTime::MAX);
+        // Rethink is this a good idea
+        // self.handle.process_at(SimTime::MAX);
 
         self.park.shutdown();
     }
