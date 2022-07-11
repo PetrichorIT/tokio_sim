@@ -643,9 +643,54 @@ cfg_rt! {
         use crate::sim::*;
         use basic_scheduler::RuntimeIdle;
 
+        ///
+        /// A guard while a new time context is swapped in.
+        ///
+        #[derive(Debug)]
+        pub struct TimeContextGuard<'a> {
+            rt: &'a Runtime,
+            reset: Option<TimeContext>,
+        }
+
+        impl TimeContextGuard<'_> {
+            ///
+            /// Leaves the guarded area returning the swapped in time context.
+            ///
+            pub fn leave(mut self) -> TimeContext {
+                let mut ctx = self.reset.take().expect("A time context handle should always have a reset, until its dropped");
+                let th = self.rt.kind.time_handle();
+                let mut inner = th.get().lock();
+                inner.swap_ctx(&mut ctx);
+                ctx
+            }
+        }
+
+        impl Drop for TimeContextGuard<'_> {
+            fn drop(&mut self) {
+                if self.reset.is_some() {
+                    eprintln!("Forgot to retieve the time context, TimeContextGuard has been dropped while holding a suspended context");
+                }
+            }
+        }
+
         impl Runtime {
             // # SIM ADDITIONS
 
+            ///
+            /// Creates a guard that ensures that the provided time context
+            /// is active while the guard is active.
+            ///
+            pub fn enter_time_context(&self, mut ctx: TimeContext) -> TimeContextGuard<'_> {
+                let th = self.kind.time_handle();
+                let mut inner = th.get().lock();
+                inner.swap_ctx(&mut ctx);
+
+                TimeContextGuard {
+                    rt: self,
+                    reset: Some(ctx)
+                }
+            }           
+            
             ///
             /// Polls all time events from the time context
             /// based on the current state of `SimTime::now`.

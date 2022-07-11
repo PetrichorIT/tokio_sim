@@ -57,7 +57,7 @@ impl<P: Park + 'static> Driver<P> {
 
 impl Handle {
     pub(crate) fn next_time_poll(&self) -> Option<SimTime> {
-        self.get().lock().queue.next_wakeup()
+        self.get().lock().ctx.queue.next_wakeup()
     }
 
     pub(crate) fn process_now(&self) {
@@ -69,7 +69,7 @@ impl Handle {
         // fetch the slot for the current timepoint.
         let lock = self.get().lock();
    
-        for time_slot in lock.queue.pop(now) {
+        for time_slot in lock.ctx.queue.pop(now) {
             time_slot.wake_all();
         }
     }
@@ -92,7 +92,7 @@ impl ClockTime {
 }
 
 /// Timer state shared between `Driver`, `Handle`, and `Registration`.
-struct Inner {
+pub(crate) struct Inner {
     // The state is split like this so `Handle` can access `is_shutdown` without locking the mutex
     pub(super) state: Mutex<InnerState>,
 
@@ -100,11 +100,11 @@ struct Inner {
 }
 
 impl Inner {
-    pub(super) fn new(time_source: ClockTime, unpark: Box<dyn Unpark>) -> Inner {
+    pub(self) fn new(time_source: ClockTime, unpark: Box<dyn Unpark>) -> Inner {
         Inner {
             state: Mutex::new(InnerState {
                 time_source,
-                queue: Arc::new(TimerQueue::new(SimTime::now())),
+                ctx: TimeContext { ident: String::new(), queue: Arc::new(TimerQueue::new(SimTime::now())) },
                 unpark,
             }),
             is_shutdown: AtomicBool::new(false),
@@ -112,7 +112,7 @@ impl Inner {
     }
 
     /// Locks the driver's inner structure
-    pub(super) fn lock(&self) -> crate::loom::sync::MutexGuard<'_, InnerState> {
+    pub(crate) fn lock(&self) -> crate::loom::sync::MutexGuard<'_, InnerState> {
         self.state.lock()
     }
 
@@ -123,16 +123,22 @@ impl Inner {
 }
 
 /// Time state shared which must be protected by a `Mutex`
-struct InnerState {
+pub(crate) struct InnerState {
     /// Timing backend in use.
     #[allow(unused)]
     time_source: ClockTime,
 
     // Timer queue to handle wakeups
-    queue: Arc<TimerQueue>,
+    pub(crate) ctx: TimeContext,
 
     #[allow(unused)]
     unpark: Box<dyn Unpark>,
+}
+
+impl InnerState {
+    pub(crate) fn swap_ctx(&mut self, other: &mut TimeContext) {
+        std::mem::swap(&mut self.ctx, other)
+    } 
 }
 
 impl<P> Park for Driver<P>
@@ -197,3 +203,27 @@ impl<P: Park + 'static> Unpark for TimerUnpark<P> {
     }
 }
 
+///
+/// The context holding all time sensitiv futures of a runtime.
+///
+#[derive(Debug)]
+pub struct TimeContext {
+    ident: String,
+    queue: Arc<TimerQueue>,
+}
+
+impl TimeContext {
+
+    /// Creates a new time context.
+    pub fn new(ident: String) -> Self {
+        Self {
+            ident,
+            queue: Arc::new(TimerQueue::new(SimTime::now())),
+        }
+    }
+
+    /// An identifier for the time context. Empty string if default time context is used.
+    pub fn ident(&self) -> &str {
+        &self.ident[..]
+    }
+}

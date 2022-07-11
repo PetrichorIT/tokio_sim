@@ -300,7 +300,7 @@ impl Future for Sleep {
             Ordering::Greater => {
                 // Setup waker
                 // TimeDriver::with_current(|mut driver| driver.wake_sleeper(&self, cx));
-                let handle = Handle::current().get().lock().queue.push(
+                let handle = Handle::current().get().lock().ctx.queue.push(
                     TimeSlotEntry { id: *me.id, waker: cx.waker().clone() }, 
                     *me.deadline
                 );

@@ -27,6 +27,8 @@ pub use driver::timeout_at;
 pub use error::Elapsed;
 pub use driver::Timeout;
 
+pub use driver::TimeContext;
+
 /// A temporary redirect
 pub type Instant = SimTime;
 

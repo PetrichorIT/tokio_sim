@@ -18,7 +18,7 @@ impl Handle {
     }
 
     /// Access the driver's inner structure.
-    pub(super) fn get(&self) -> &super::Inner {
+    pub(crate) fn get(&self) -> &super::Inner {
         &*self.inner
     }
 
