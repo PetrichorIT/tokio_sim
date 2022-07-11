@@ -62,13 +62,17 @@ impl Handle {
 
     pub(crate) fn process_now(&self) {
         let now = SimTime::now();
+        println!("[0] now = {}", now);
         self.process_at(now)
     }
 
     pub(crate) fn process_at(&self, now: SimTime) {
         // fetch the slot for the current timepoint.
+        println!("[1] now = {}", now);
         let lock = self.get().lock();
-   
+
+        println!("[2] SimTime::now() = {}, now = {}", SimTime::now(), now);
+
         for time_slot in lock.ctx.queue.pop(now) {
             time_slot.wake_all();
         }
@@ -104,7 +108,10 @@ impl Inner {
         Inner {
             state: Mutex::new(InnerState {
                 time_source,
-                ctx: TimeContext { ident: String::new(), queue: Arc::new(TimerQueue::new(SimTime::now())) },
+                ctx: TimeContext {
+                    ident: String::new(),
+                    queue: Arc::new(TimerQueue::new(SimTime::now())),
+                },
                 unpark,
             }),
             is_shutdown: AtomicBool::new(false),
@@ -138,7 +145,7 @@ pub(crate) struct InnerState {
 impl InnerState {
     pub(crate) fn swap_ctx(&mut self, other: &mut TimeContext) {
         std::mem::swap(&mut self.ctx, other)
-    } 
+    }
 }
 
 impl<P> Park for Driver<P>
@@ -192,7 +199,6 @@ impl<P: Park + 'static> TimerUnpark<P> {
     fn new(driver: &Driver<P>) -> TimerUnpark<P> {
         TimerUnpark {
             inner: driver.park.unpark(),
-
         }
     }
 }
@@ -213,7 +219,6 @@ pub struct TimeContext {
 }
 
 impl TimeContext {
-
     /// Creates a new time context.
     pub fn new(ident: String) -> Self {
         Self {

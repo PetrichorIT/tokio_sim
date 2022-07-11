@@ -20,13 +20,6 @@ impl<T> SyncWrapper<T> {
         Self { value }
     }
 
-    cfg_sim! {
-        pub(crate) fn get_ref(&self) -> &T {
-            &self.value
-        }
-    }
-    
-
     pub(crate) fn into_inner(self) -> T {
         self.value
     }

@@ -4,10 +4,8 @@ use std::fmt::*;
 use std::ops::*;
 
 use super::Duration;
-use crate::util::SyncWrapper;
 
-pub(crate) static SIMTIME_NOW: SyncWrapper<Cell<SimTime>> =
-    SyncWrapper::new(Cell::new(SimTime::ZERO));
+thread_local!(pub(crate) static SIMTIME: Cell<SimTime> = const { Cell::new(SimTime::ZERO) });
 
 ///
 /// A specific point of time in the simulation.
@@ -34,14 +32,15 @@ impl SimTime {
     /// ```
     #[must_use]
     pub fn now() -> Self {
-        SIMTIME_NOW.get_ref().get()
+        SIMTIME.with(|s| s.get())
     }
 
     ///
     /// Sets the current clock
     ///
     pub fn set_now(time: SimTime) {
-        SIMTIME_NOW.get_ref().set(time)
+        println!("[SET] {}", time);
+        SIMTIME.with(|s| s.set(time));
     }
 
     ///
