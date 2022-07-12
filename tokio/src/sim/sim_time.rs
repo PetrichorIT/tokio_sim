@@ -39,7 +39,6 @@ impl SimTime {
     /// Sets the current clock
     ///
     pub fn set_now(time: SimTime) {
-        println!("[SET] {}", time);
         SIMTIME.with(|s| s.set(time));
     }
 
