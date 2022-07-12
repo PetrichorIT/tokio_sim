@@ -17,7 +17,7 @@ impl SimTime {
     ///
     /// Creates a raw simtime from a duration
     ///
-    pub fn from_duration(dur: Duration) -> Self {
+    pub const fn from_duration(dur: Duration) -> Self {
         Self(dur)
     }
 
