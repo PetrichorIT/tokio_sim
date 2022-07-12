@@ -210,6 +210,29 @@ impl Add<SimTime> for SimTime {
     }
 }
 
+impl AddAssign<SimTime> for SimTime {
+    fn add_assign(&mut self, rhs: SimTime) {
+        self.0.add_assign(rhs.0)
+    }
+}
+
+// f64
+
+impl Add<f64> for SimTime {
+    type Output = SimTime;
+
+    fn add(self, rhs: f64) -> Self::Output {
+        self.checked_add(Duration::from_secs_f64(rhs))
+            .expect("Overflow when adding Duration to SimTime")
+    }
+}
+
+impl AddAssign<f64> for SimTime {
+    fn add_assign(&mut self, rhs: f64) {
+        self.0.add_assign(Duration::from_secs_f64(rhs))
+    }
+}
+
 impl Default for SimTime {
     fn default() -> Self {
         Self::from(0.0)
