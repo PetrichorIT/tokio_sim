@@ -109,6 +109,8 @@ impl SimTime {
 impl SimTime {
     /// The smallest instance of a [SimTime].
     pub const ZERO: SimTime = SimTime(Duration::ZERO);
+    /// One second instance of a [SimTime].
+    pub const ONE: SimTime = SimTime(Duration::new(1, 0));
     /// The smallest valid instance of a [SimTime].
     pub const MIN: SimTime = SimTime(Duration::ZERO);
     /// The greatest instance of a [SimTime].
@@ -189,12 +191,6 @@ impl Display for SimTime {
 
 // FROM
 
-// impl From<SimTime> for f32 {
-//     fn from(this: SimTime) -> Self {
-//         this.0.as_secs_f32()
-//     }
-// }
-
 impl From<SimTime> for f64 {
     fn from(this: SimTime) -> Self {
         this.0.as_secs_f64()
@@ -207,28 +203,6 @@ impl From<f64> for SimTime {
     }
 }
 
-// impl From<f32> for SimTime {
-//     fn from(value: f32) -> Self {
-//         SimTime(Duration::from(value))
-//     }
-// }
-
-// TIMESPEC
-
-#[cfg(feature = "cqueue")]
-impl cqueue::AsNanosU128 for SimTime {
-    fn as_nanos(&self) -> u128 {
-        self.0.as_nanos()
-    }
-}
-
-#[cfg(feature = "cqueue")]
-impl cqueue::Timespec for SimTime {
-    const ZERO: Self = SimTime(Duration::ZERO);
-    const ONE: Self = SimTime(Duration::new(1, 0));
-}
-
-#[cfg(feature = "cqueue")]
 impl Add<SimTime> for SimTime {
     type Output = SimTime;
     fn add(self, rhs: SimTime) -> SimTime {
