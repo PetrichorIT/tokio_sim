@@ -4,9 +4,9 @@ use std::pin::Pin;
 use std::sync::atomic::AtomicUsize;
 use std::task::{Context, Poll};
 
-use super::Handle;
 use super::queue::{TimeSlotEntry, TimeSlotEntryHandle};
-use crate::sim::{Duration, SimTime};
+use super::Handle;
+use crate::time::{Duration, SimTime};
 use pin_project_lite::pin_project;
 
 /// Waits until `deadline` is reached.
@@ -220,7 +220,7 @@ pin_project! {
     pub struct Sleep {
         pub(crate) deadline: SimTime,
         pub(crate) id: usize,
-    
+
         pub(super) handle: Option<TimeSlotEntryHandle>,
     }
 }
@@ -228,7 +228,11 @@ pin_project! {
 impl Sleep {
     pub(crate) fn new_timeout(deadline: SimTime) -> Sleep {
         let next = SLEEP_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        Sleep { deadline, id: next, handle: None }
+        Sleep {
+            deadline,
+            id: next,
+            handle: None,
+        }
     }
 
     pub(crate) fn far_future() -> Sleep {
@@ -301,8 +305,11 @@ impl Future for Sleep {
                 // Setup waker
                 // TimeDriver::with_current(|mut driver| driver.wake_sleeper(&self, cx));
                 let handle = Handle::current().get().lock().ctx.queue.push(
-                    TimeSlotEntry { id: *me.id, waker: cx.waker().clone() }, 
-                    *me.deadline
+                    TimeSlotEntry {
+                        id: *me.id,
+                        waker: cx.waker().clone(),
+                    },
+                    *me.deadline,
                 );
                 *me.handle = Some(handle);
                 Poll::Pending

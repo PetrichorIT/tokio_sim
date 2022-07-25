@@ -4,7 +4,7 @@
 //!
 //! [`Timeout`]: struct@Timeout
 
-use crate::sim::{sleep_until, Duration, SimTime, Sleep, error::*};
+use crate::time::{error::*, sleep_until, Duration, SimTime, Sleep};
 
 use pin_project_lite::pin_project;
 use std::future::Future;
@@ -181,4 +181,3 @@ where
         poll_delay()
     }
 }
-

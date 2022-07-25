@@ -457,7 +457,7 @@ cfg_time! {
     pub mod time;
 
     #[cfg(feature = "sim")]
-    pub use crate::sim as time;
+    pub use crate::sim::time as time;
 }
 
 mod util;

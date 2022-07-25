@@ -310,7 +310,7 @@ cfg_rt! {
     }
 
     cfg_sim! {
-        use crate::sim::driver::Handle as TimeHandle;
+        use crate::time::driver::Handle as TimeHandle;
 
         #[allow(unused)]
         impl Kind {
@@ -640,7 +640,7 @@ cfg_rt! {
     }
 
     cfg_sim! {
-        use crate::sim::*;
+        use crate::time::*;
         use basic_scheduler::RuntimeIdle;
 
         ///
@@ -689,8 +689,8 @@ cfg_rt! {
                     rt: self,
                     reset: Some(ctx)
                 }
-            }           
-            
+            }
+
             ///
             /// Polls all time events from the time context
             /// based on the current state of `SimTime::now`.

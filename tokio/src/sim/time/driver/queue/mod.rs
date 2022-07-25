@@ -1,11 +1,11 @@
-use std::cell::RefCell;
 use std::cell::Cell;
+use std::cell::RefCell;
 use std::cmp::{Eq, PartialEq};
 use std::collections::VecDeque;
 use std::task::Waker;
 
 use crate::loom::sync::{Arc, Weak};
-use crate::sim::SimTime;
+use crate::time::SimTime;
 
 #[derive(Debug)]
 pub(super) struct TimerQueue {
@@ -31,8 +31,7 @@ impl TimerQueue {
         let id = entry.id;
 
         // Binary search for slot
-        match pending.binary_search_by(|slot| slot.slot.cmp(&time))
-        {
+        match pending.binary_search_by(|slot| slot.slot.cmp(&time)) {
             Ok(found) => {
                 pending[found].push(entry);
                 TimeSlotEntryHandle {
@@ -67,7 +66,7 @@ impl TimerQueue {
         self.current.set(now);
         let front = match self.pending.borrow().front() {
             Some(v) => v.slot,
-            None => return Vec::new()
+            None => return Vec::new(),
         };
         if front <= now {
             let mut buffer = Vec::new();
@@ -120,7 +119,10 @@ impl TimeSlot {
     }
 
     pub(crate) fn wake_all(self) {
-        self.entries.into_inner().into_iter().for_each(|entry| entry.waker.wake())
+        self.entries
+            .into_inner()
+            .into_iter()
+            .for_each(|entry| entry.waker.wake())
     }
 }
 
