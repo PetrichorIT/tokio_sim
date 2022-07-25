@@ -166,12 +166,17 @@ impl BasicScheduler {
     pub(crate) fn spawner(&self) -> &Spawner {
         &self.spawner
     }
-    
-    #[cfg(feature = "sim")]
-    pub(super) fn time_handle(&self) -> crate::sim::driver::Handle {
-        self.spawner.shared.handle_inner.time_handle.as_ref().unwrap().clone()
-    }
 
+    #[cfg(feature = "sim")]
+    pub(super) fn time_handle(&self) -> crate::time::driver::Handle {
+        self.spawner
+            .shared
+            .handle_inner
+            .time_handle
+            .as_ref()
+            .unwrap()
+            .clone()
+    }
 
     #[track_caller]
     pub(crate) fn block_on<F: Future>(&self, future: F) -> F::Output {

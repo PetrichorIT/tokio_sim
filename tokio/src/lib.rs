@@ -409,9 +409,7 @@ mod future;
 
 pub mod io;
 
-cfg_no_sim! {
-    pub mod net;
-}
+pub mod net;
 
 mod loom;
 mod park;
@@ -463,6 +461,7 @@ cfg_time! {
 mod util;
 
 #[cfg(feature = "sim")]
+/// Simulain utils;
 pub mod sim;
 
 /// Due to the `Stream` trait's inclusion in `std` landing later than Tokio's 1.0
