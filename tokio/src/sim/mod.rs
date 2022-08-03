@@ -1,5 +1,10 @@
 /// SEE TIME
 pub mod time;
 
-/// SEE NET
-pub mod net;
+cfg_net! {
+    /// SEE NET
+    pub mod net;
+}
+
+///  CTX
+pub mod ctx;
