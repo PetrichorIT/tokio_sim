@@ -43,11 +43,11 @@ impl SimTime {
     }
 
     ///
-    /// Performs a equallity check with a 10ns error margin.
+    /// Performs a equallity check with a error margin.
     ///
-    pub fn eq_approx(&self, other: SimTime) -> bool {
+    pub fn eq_approx(&self, other: SimTime, error: Duration) -> bool {
         let dur = self.duration_diff(other);
-        dur < Duration::from_nanos(10)
+        dur < error
     }
 
     /// Retursn the amount of time elapsed from the earlier of the two values
