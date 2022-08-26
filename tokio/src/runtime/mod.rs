@@ -640,35 +640,39 @@ cfg_rt! {
     }
 
     cfg_sim! {
-        use crate::time::*;
+        use crate::sim::{ctx::SimContext, time::SimTime};
         use basic_scheduler::RuntimeIdle;
 
         ///
         /// A guard while a new time context is swapped in.
         ///
         #[derive(Debug)]
-        pub struct TimeContextGuard<'a> {
+        pub struct SimContextGuard<'a> {
             rt: &'a Runtime,
-            reset: Option<TimeContext>,
+            reset: Option<SimContext>,
         }
 
-        impl TimeContextGuard<'_> {
+        impl SimContextGuard<'_> {
             ///
             /// Leaves the guarded area returning the swapped in time context.
             ///
-            pub fn leave(mut self) -> TimeContext {
+            pub fn leave(mut self) -> SimContext {
                 let mut ctx = self.reset.take().expect("A time context handle should always have a reset, until its dropped");
+                SimContext::swap(&mut ctx);
+
+                // Legacy TimeContext Swap
                 let th = self.rt.kind.time_handle();
                 let mut inner = th.get().lock();
-                inner.swap_ctx(&mut ctx);
+                inner.swap_ctx(ctx.time.as_mut().unwrap());
+
                 ctx
             }
         }
 
-        impl Drop for TimeContextGuard<'_> {
+        impl Drop for SimContextGuard<'_> {
             fn drop(&mut self) {
                 if self.reset.is_some() {
-                    eprintln!("Forgot to retieve the time context, TimeContextGuard has been dropped while holding a suspended context");
+                    eprintln!("Forgot to retieve the time context, SimContextGuard has been dropped while holding a suspended context");
                 }
             }
         }
@@ -680,14 +684,20 @@ cfg_rt! {
             /// Creates a guard that ensures that the provided time context
             /// is active while the guard is active.
             ///
-            pub fn enter_time_context(&self, mut ctx: TimeContext) -> TimeContextGuard<'_> {
+            pub fn enter_context(&self, mut ctx: SimContext) -> SimContextGuard<'_> {
+
+                // Legacy TimeContext Swap
                 let th = self.kind.time_handle();
                 let mut inner = th.get().lock();
-                inner.swap_ctx(&mut ctx);
+                inner.swap_ctx(ctx.time.as_mut().unwrap());
 
-                TimeContextGuard {
+                // cx must be stored.
+
+                SimContext::swap(&mut ctx);
+
+                SimContextGuard {
                     rt: self,
-                    reset: Some(ctx)
+                    reset: Some(ctx),
                 }
             }
 
@@ -704,6 +714,24 @@ cfg_rt! {
                 self.kind.poll_time_events();
 
                 drop(_enter)
+            }
+
+            /// Processes an arriving UDP packet.
+            #[cfg(feature = "net")]
+            pub fn process_udp(&self, msg: crate::sim::net::UdpMessage) {
+                use crate::sim::net::IOContext;
+
+                IOContext::with_current(|ctx| {
+                    ctx.process_udp(msg)
+                })
+            }
+
+            /// Yields all intents of the network adapter.
+            #[cfg(feature = "net")]
+            pub fn yield_intents(&self) -> Vec<crate::sim::net::IOIntent> {
+                use crate::sim::net::IOContext;
+
+                IOContext::with_current(|ctx| ctx.yield_intents())
             }
 
             ///

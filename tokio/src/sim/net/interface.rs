@@ -1,5 +1,5 @@
 use std::fmt;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 /// A network interface.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -12,6 +12,8 @@ pub struct Interface {
     pub addrs: Vec<InterfaceAddr>,
     /// The status.s
     pub status: InterfaceStatus,
+
+    pub(crate) prio: usize,
 }
 
 impl Interface {
@@ -22,6 +24,7 @@ impl Interface {
             flags: InterfaceFlags::loopback(),
             addrs: Vec::from(InterfaceAddr::loopback()),
             status: InterfaceStatus::Active,
+            prio: 100,
         }
     }
 
@@ -32,6 +35,7 @@ impl Interface {
             flags: InterfaceFlags::en0(),
             addrs: Vec::from(InterfaceAddr::en0(ether, v4)),
             status: InterfaceStatus::Active,
+            prio: 10,
         }
     }
 }
@@ -193,6 +197,38 @@ impl InterfaceAddr {
                 netmask: Ipv4Addr::new(255, 255, 255, 0),
             },
         ]
+    }
+
+    /// Indicates whether the given ip is valid on the interface address.
+    pub fn matches_ip(&self, ip: IpAddr) -> bool {
+        match self {
+            Self::Inet { addr, netmask } if ip.is_ipv4() => {
+                let ip = if let IpAddr::V4(v) = ip {
+                    v
+                } else {
+                    unreachable!()
+                };
+
+                let ip_u32 = u32::from_be_bytes(ip.octets());
+                let addr_u32 = u32::from_be_bytes(addr.octets());
+                let mask_u32 = u32::from_be_bytes(netmask.octets());
+
+                mask_u32 & ip_u32 == addr_u32
+            }
+            Self::Inet6 { .. } if ip.is_ipv6() => {
+                todo!()
+            }
+            _ => false,
+        }
+    }
+
+    /// Returns an available Ip.
+    pub fn next_ip(&self) -> Option<IpAddr> {
+        match self {
+            Self::Ether { .. } => None,
+            Self::Inet { addr, .. } => Some(IpAddr::V4(*addr)),
+            Self::Inet6 { addr, .. } => Some(IpAddr::V6(*addr)),
+        }
     }
 }
 
