@@ -4,6 +4,7 @@ use std::io::{Error, ErrorKind};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::pin::Pin;
 use std::task::{Context, Poll, Waker};
+use std::time::Duration;
 
 pub(crate) use std::io::Result;
 
@@ -34,8 +35,11 @@ pub enum IOIntent {
 
     /// The intent to perform a tcp handshake.
     TcpConnect(TcpConnectMessage),
+    /// A timeout of a connection setup
+    TcpConnectTimeout(TcpConnectMessage, Duration),
+
     /// The intent to forward a tcp packet onto the network layer.
-    TcpSendPacket(),
+    TcpSendPacket(TcpMessage),
     /// The intent to shut down a tcp connection
     TcpShutdown(),
 
@@ -52,6 +56,8 @@ pub(crate) enum IOInterest {
 
     TcpAccept(SocketAddr),
     TcpConnect((SocketAddr, SocketAddr)),
+    TcpRead((SocketAddr, SocketAddr)),
+    TcpWrite((SocketAddr, SocketAddr)),
 }
 
 #[derive(Debug, Clone)]
@@ -61,7 +67,7 @@ pub(super) struct IOInterestGuard {
 }
 
 impl Future for IOInterest {
-    type Output = ();
+    type Output = Result<()>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // let this = Pin::into_inner(self.into_inner();
@@ -78,13 +84,16 @@ impl Future for IOInterest {
 
                         Poll::Pending
                     } else {
-                        Poll::Ready(())
+                        Poll::Ready(Ok(()))
                     }
                 } else {
-                    panic!("SimContext has los UdpSocket")
+                    Poll::Ready(Err(Error::new(
+                        ErrorKind::Other,
+                        "Simulation context has dropped UdpSocket",
+                    )))
                 }
             }),
-            IOInterest::UdpWrite(_) => Poll::Ready(()),
+            IOInterest::UdpWrite(_) => Poll::Ready(Ok(())),
 
             // == TCP ==
             IOInterest::TcpAccept(ref sock) => IOContext::with_current(|ctx| {
@@ -97,29 +106,79 @@ impl Future for IOInterest {
 
                         Poll::Pending
                     } else {
-                        Poll::Ready(())
+                        Poll::Ready(Ok(()))
                     }
                 } else {
-                    panic!("SimContext has lost TcpListener");
+                    Poll::Ready(Err(Error::new(
+                        ErrorKind::Other,
+                        "Simulation context has dropped TcpListener",
+                    )))
                 }
             }),
 
-            IOInterest::TcpConnect(ref addrpeer) => IOContext::with_current(|ctx| {
-                if let Some(handle) = ctx.tcp_streams.get_mut(addrpeer) {
+            IOInterest::TcpConnect(ref addr_peer) => IOContext::with_current(|ctx| {
+                if let Some(handle) = ctx.tcp_streams.get_mut(addr_peer) {
                     if handle.acked {
-                        Poll::Ready(())
+                        Poll::Ready(Ok(()))
                     } else {
+                        if handle.connection_failed {
+                            handle.connection_failed = false;
+
+                            Poll::Ready(Err(Error::new(
+                                ErrorKind::NotConnected,
+                                "Connection timed out",
+                            )))
+                        } else {
+                            let (addr, peer) = *addr_peer;
+
+                            let msg = TcpConnectMessage::ClientInitiate {
+                                client: addr,
+                                server: peer,
+                            };
+
+                            ctx.intents.push(IOIntent::TcpConnect(msg));
+                            ctx.intents.push(IOIntent::TcpConnectTimeout(
+                                msg,
+                                handle.config.connect_timeout,
+                            ));
+
+                            handle.interests.push(IOInterestGuard {
+                                interest: self.clone(),
+                                waker: cx.waker().clone(),
+                            });
+
+                            Poll::Pending
+                        }
+                    }
+                } else {
+                    Poll::Ready(Err(Error::new(
+                        ErrorKind::Other,
+                        "Simulation context has dropped TcpStream",
+                    )))
+                }
+            }),
+
+            // Stream operations
+            IOInterest::TcpRead(ref addr_peer) => IOContext::with_current(|ctx| {
+                if let Some(handle) = ctx.tcp_streams.get_mut(addr_peer) {
+                    if handle.incoming.is_empty() {
                         handle.interests.push(IOInterestGuard {
                             interest: self.clone(),
                             waker: cx.waker().clone(),
                         });
 
                         Poll::Pending
+                    } else {
+                        Poll::Ready(Ok(()))
                     }
                 } else {
-                    panic!("SimContext has lost TcpStream")
+                    Poll::Ready(Err(Error::new(
+                        ErrorKind::Other,
+                        "Simulation context has dropped TcpStream",
+                    )))
                 }
             }),
+            IOInterest::TcpWrite(_) => Poll::Ready(Ok(())),
         }
     }
 }
@@ -254,6 +313,52 @@ impl IOContext {
             }
         }
     }
+
+    ///
+    /// Processa a tcp packet
+    ///
+    pub fn process_tcp_packet(&mut self, msg: TcpMessage) {
+        if let Some(handle) = self.tcp_streams.get_mut(&(msg.dest_addr, msg.src_addr)) {
+            handle.incoming.push(msg);
+
+            let mut i = 0;
+            while i < handle.interests.len() {
+                if matches!(handle.interests[i].interest, IOInterest::TcpRead(_)) {
+                    let w = handle.interests.swap_remove(i);
+                    w.waker.wake();
+                } else {
+                    i += 1;
+                }
+            }
+        }
+    }
+
+    ///
+    /// Processes a timeout
+    ///
+    pub fn process_tcp_connect_timeout(&mut self, msg: TcpConnectMessage) {
+        match msg {
+            TcpConnectMessage::ClientInitiate { client, server } => {
+                if let Some(handle) = self.tcp_streams.get_mut(&(client, server)) {
+                    // If no connection was established
+                    if !handle.acked {
+                        handle.connection_failed = true;
+
+                        let mut i = 0;
+                        while i < handle.interests.len() {
+                            if matches!(handle.interests[i].interest, IOInterest::TcpConnect(_)) {
+                                let w = handle.interests.swap_remove(i);
+                                w.waker.wake();
+                            } else {
+                                i += 1;
+                            }
+                        }
+                    }
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
 }
 
 // === UDP ===
@@ -311,15 +416,15 @@ impl IOContext {
         src_addr: SocketAddr,
         dest_addr: SocketAddr,
         content: Vec<u8>,
-    ) {
+    ) -> Result<()> {
         // (1) Check a socket exits
         let handle = match self.udp_sockets.get(&src_addr) {
             Some(v) => v,
             None => {
-                panic!(
-                    "Could not find handle for {} active ctx {:?} ",
-                    src_addr, self
-                );
+                return Err(Error::new(
+                    ErrorKind::Other,
+                    "Simulation context has dropped UdpSocket",
+                ))
             }
         };
 
@@ -332,13 +437,20 @@ impl IOContext {
         };
 
         // (3) Send
-        self.intents.push(IOIntent::UdpSendPacket(msg))
+        self.intents.push(IOIntent::UdpSendPacket(msg));
+
+        Ok(())
     }
 
     pub(self) fn udp_connect(&mut self, socket: SocketAddr, peer: SocketAddr) -> Result<()> {
         let handle = match self.udp_sockets.get_mut(&socket) {
             Some(v) => v,
-            None => panic!("Lost socket"),
+            None => {
+                return Err(Error::new(
+                    ErrorKind::Other,
+                    "Simulation context has dropped UdpSocket",
+                ))
+            }
         };
 
         handle.state = UdpSocketState::Connected(peer);
@@ -447,16 +559,25 @@ impl IOContext {
         return Ok(TcpListener { addr });
     }
 
-    pub(self) fn tcp_accept(&mut self, addr: SocketAddr) -> Option<TcpStream> {
+    pub(self) fn tcp_drop_listener(&mut self, addr: SocketAddr) {
+        self.tcp_listeners.remove(&addr);
+    }
+
+    pub(self) fn tcp_accept(&mut self, addr: SocketAddr) -> Result<TcpStream> {
         if let Some(handle) = self.tcp_listeners.get_mut(&addr) {
-            let con = handle.incoming.pop()?;
+            let con = match handle.incoming.pop() {
+                Some(con) => con,
+                None => return Err(Error::new(ErrorKind::WouldBlock, "WouldBlock")),
+            };
 
             assert_eq!(con.local_addr, addr);
 
             let buf = TcpStreamHandle {
                 local_addr: con.local_addr,
                 peer_addr: con.peer_addr,
+
                 acked: true,
+                connection_failed: false,
 
                 incoming: Vec::new(),
                 config: handle.config.accept(con),
@@ -464,12 +585,15 @@ impl IOContext {
             };
             self.tcp_streams
                 .insert((con.local_addr, con.peer_addr), buf);
-            Some(TcpStream {
+            Ok(TcpStream {
                 local_addr: con.local_addr,
                 peer_addr: con.peer_addr,
             })
         } else {
-            panic!("Theif")
+            Err(Error::new(
+                ErrorKind::Other,
+                "Simulation context has dropped TcpListener",
+            ))
         }
     }
 
@@ -482,6 +606,8 @@ impl IOContext {
             peer_addr: peer,
 
             acked: false,
+            connection_failed: false,
+
             incoming: Vec::new(),
             interests: Vec::new(),
 
@@ -532,7 +658,7 @@ impl IOContext {
                             self.tcp_next_port += 1;
                         } else {
                             // Check for collision
-                            todo!()
+                            // TODO
                         }
 
                         return Ok(addr);
@@ -646,8 +772,22 @@ pub(self) struct TcpStreamHandle {
     pub(super) peer_addr: SocketAddr,
 
     pub(super) acked: bool,
+    pub(super) connection_failed: bool,
 
-    pub(super) incoming: Vec<TcpListenerPendingConnection>,
+    pub(super) incoming: Vec<TcpMessage>,
     pub(self) config: TcpSocketConfig,
     pub(super) interests: Vec<IOInterestGuard>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// A UDP Message in the network.
+pub struct TcpMessage {
+    /// The content byte-encoded.
+    pub content: Vec<u8>,
+    /// The senders bound address.
+    pub src_addr: SocketAddr,
+    /// The receivers address.
+    pub dest_addr: SocketAddr,
+    /// Time-To-Live
+    pub ttl: u32,
 }

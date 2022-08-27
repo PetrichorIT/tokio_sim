@@ -10,16 +10,19 @@ pub use stream::*;
 #[derive(Debug, Clone)]
 #[allow(unused)]
 pub(super) struct TcpSocketConfig {
-    addr: SocketAddr,
-    linger: Option<Duration>,
+    pub(super) addr: SocketAddr,
+    pub(super) linger: Option<Duration>,
 
-    listen_backlog: u32,
-    recv_buffer_size: u32,
-    send_buffer_size: u32,
-    reuseaddr: bool,
-    reuseport: bool,
+    pub(super) listen_backlog: u32,
+    pub(super) recv_buffer_size: u32,
+    pub(super) send_buffer_size: u32,
+    pub(super) reuseaddr: bool,
+    pub(super) reuseport: bool,
 
-    ttl: u32,
+    pub(super) connect_timeout: Duration,
+    pub(super) nodelay: bool,
+
+    pub(super) ttl: u32,
 }
 
 impl TcpSocketConfig {
@@ -33,6 +36,9 @@ impl TcpSocketConfig {
             send_buffer_size: 2048,
             reuseaddr: true,
             reuseport: true,
+
+            connect_timeout: Duration::from_secs(2),
+            nodelay: true,
 
             ttl: 64,
         }
@@ -49,6 +55,9 @@ impl TcpSocketConfig {
             reuseaddr: false,
             reuseport: false,
 
+            connect_timeout: Duration::from_secs(2),
+            nodelay: true,
+
             ttl: 64,
         }
     }
@@ -63,6 +72,9 @@ impl TcpSocketConfig {
             send_buffer_size: 2048,
             reuseaddr: false,
             reuseport: false,
+
+            connect_timeout: Duration::from_secs(2),
+            nodelay: true,
 
             ttl: 64,
         }

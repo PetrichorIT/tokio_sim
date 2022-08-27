@@ -726,6 +726,37 @@ cfg_rt! {
                 })
             }
 
+            /// Processes an arriving UDP packet.
+            #[cfg(feature = "net")]
+            pub fn process_tcp_connect(&self, msg: crate::sim::net::TcpConnectMessage) {
+                use crate::sim::net::IOContext;
+
+                IOContext::with_current(|ctx| {
+                    ctx.process_tcp_connect(msg)
+                })
+            }
+
+            /// Processes an arriving UDP packet.
+            #[cfg(feature = "net")]
+            pub fn process_tcp_connect_timeout(&self, msg: crate::sim::net::TcpConnectMessage) {
+                use crate::sim::net::IOContext;
+
+                IOContext::with_current(|ctx| {
+                    ctx.process_tcp_connect_timeout(msg)
+                })
+            }
+
+
+            /// Processes an arriving UDP packet.
+            #[cfg(feature = "net")]
+            pub fn process_tcp_packet(&self, msg: crate::sim::net::TcpMessage) {
+                use crate::sim::net::IOContext;
+
+                IOContext::with_current(|ctx| {
+                    ctx.process_tcp_packet(msg)
+                })
+            }
+
             /// Yields all intents of the network adapter.
             #[cfg(feature = "net")]
             pub fn yield_intents(&self) -> Vec<crate::sim::net::IOIntent> {

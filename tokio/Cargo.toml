@@ -41,7 +41,7 @@ full = [
   "time",
 ]
 
-sim = ["rt", "sync", "time"]
+sim = ["rt", "sync", "time", "net", "io-util"]
 
 fs = []
 io-util = ["memchr", "bytes"]

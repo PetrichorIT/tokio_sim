@@ -37,7 +37,7 @@ impl TcpListener {
     /// This function sets the SO_REUSEADDR option on the socket.
     pub async fn bind<A: ToSocketAddrs>(addr: A) -> Result<TcpListener> {
         let addrs = to_socket_addrs(addr).await?;
-      
+
         // Get the current context
         IOContext::with_current(|ctx| {
             let mut last_err = None;
@@ -62,13 +62,21 @@ impl TcpListener {
     pub async fn accept(&self) -> Result<(TcpStream, SocketAddr)> {
         loop {
             let interest = IOInterest::TcpAccept(self.addr);
-            interest.await;
+            interest.await?;
 
             let con = IOContext::with_current(|ctx| {
                 ctx.tcp_accept(self.addr)
             });
 
-            let con = if let Some(con) = con { con } else { continue };
+            let con = match con {
+                Ok(con) => con,
+                Err(e) => {
+                    if e.kind() == ErrorKind::WouldBlock {
+                        continue
+                    }
+                    return Err(e)
+                }
+            };
             let peer = con.peer_addr;
 
             return Ok((con, peer))
@@ -126,5 +134,11 @@ impl TcpListener {
                 Err(Error::new(ErrorKind::Other, "Lost Tcp"))
             }
         })
+    }
+}
+
+impl Drop for TcpListener {
+    fn drop(&mut self) {
+        IOContext::try_with_current(|ctx| ctx.tcp_drop_listener(self.addr));
     }
 }

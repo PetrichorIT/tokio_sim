@@ -36,10 +36,22 @@ impl Interest {
         }
     }
 
-    pub(super) fn io_interest(self, socket: SocketAddr, is_tcp: bool) -> (IOInterest, Ready) {
+    pub(super) fn udp_io_interest(self, socket: SocketAddr) -> (IOInterest, Ready) {
         match self.id {
-            0b1 if !is_tcp => (IOInterest::UdpRead(socket), Ready::READABLE),
-            0b01 if !is_tcp => (IOInterest::UdpWrite(socket), Ready::WRITABLE),
+            0b1 => (IOInterest::UdpRead(socket), Ready::READABLE),
+            0b10 => (IOInterest::UdpWrite(socket), Ready::WRITABLE),
+            _ => todo!(),
+        }
+    }
+
+    pub(super) fn tcp_io_interest(
+        self,
+        socket: SocketAddr,
+        peer: SocketAddr,
+    ) -> (IOInterest, Ready) {
+        match self.id {
+            0b1 => (IOInterest::TcpRead((socket, peer)), Ready::READABLE),
+            0b10 => (IOInterest::TcpWrite((socket, peer)), Ready::WRITABLE),
             _ => todo!(),
         }
     }

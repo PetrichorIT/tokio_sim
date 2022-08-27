@@ -124,8 +124,8 @@ impl UdpSocket {
     /// The function may complete without the socket being ready. 
     /// This is a false-positive and attempting an operation will return with `io::ErrorKind::WouldBlock`.
     pub async fn ready(&self, interest: Interest) -> Result<Ready> {
-        let (io, ready) = interest.io_interest(self.addr, false);
-        io.await;
+        let (io, ready) = interest.udp_io_interest(self.addr);
+        io.await?;
         Ok(ready)
     }
 
@@ -160,7 +160,7 @@ impl UdpSocket {
                 return Err(Error::new(ErrorKind::Other, "No Peer"))
             };
 
-            ctx.udp_send(self.addr, peer, Vec::from(buf));
+            ctx.udp_send(self.addr, peer, Vec::from(buf))?;
             Ok(buf.len())
         })
     }
@@ -184,7 +184,7 @@ impl UdpSocket {
                 return Err(Error::new(ErrorKind::Other, "No Peer"))
             };
 
-            ctx.udp_send(self.addr, peer, Vec::from(buf));
+            ctx.udp_send(self.addr, peer, Vec::from(buf))?;
             Ok(buf.len())
         })
     }
@@ -220,7 +220,7 @@ impl UdpSocket {
 
         loop {
             let interest = IOInterest::UdpRead(self.addr);
-            interest.await;
+            interest.await?;
 
             let r = IOContext::with_current(|ctx| {
                 if let Some(handle) = ctx
@@ -317,8 +317,8 @@ impl UdpSocket {
         let first = addr.unwrap().next().unwrap();
 
         IOContext::with_current(|ctx| {
-            ctx.udp_send(self.addr, first, Vec::from(buf));
-        });
+            ctx.udp_send(self.addr, first, Vec::from(buf))
+        })?;
 
         Ok(buf.len())
     }
@@ -341,8 +341,8 @@ impl UdpSocket {
     /// This function is usually paired with writable().
     pub fn try_send_to(&self, buf: &[u8], target: SocketAddr) -> Result<usize> {
         IOContext::with_current(|ctx| {
-            ctx.udp_send(self.addr, target, Vec::from(buf));
-        });
+            ctx.udp_send(self.addr, target, Vec::from(buf))
+        })?;
 
         Ok(buf.len())
     }
@@ -355,7 +355,7 @@ impl UdpSocket {
     pub async fn recv_from(&self, buf: &mut [u8]) -> Result<(usize, SocketAddr)> {
         loop {
             let interest = IOInterest::UdpRead(self.addr);
-            interest.await;
+            interest.await?;
 
             let r = IOContext::with_current(|ctx| {
                 if let Some(handle) = ctx
