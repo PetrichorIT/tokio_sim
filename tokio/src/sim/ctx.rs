@@ -26,6 +26,12 @@ impl SimContext {
         }
     }
 
+    /// With a dummy IO Context.
+    pub fn with_io(mut self) -> Self {
+        self.io = Some(IOContext::empty());
+        self
+    }
+
     /// With time
     pub fn with_time(mut self, ident: String) -> Self {
         self.time = Some(TimeContext::new(ident));
@@ -78,7 +84,7 @@ impl fmt::Display for SimContext {
             writeln!(
                 f,
                 "sockets = {:?}",
-                self.io.as_ref().map(|io_ctx| &io_ctx.udp_sockets)
+                self.io.as_ref().map(|v| &v.udp_sockets)
             )?;
         }
 

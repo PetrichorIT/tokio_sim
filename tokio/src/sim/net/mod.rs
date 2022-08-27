@@ -203,6 +203,19 @@ pub struct IOContext {
 }
 
 impl IOContext {
+    /// An empty IO Context, just a dummy
+    pub fn empty() -> Self {
+        Self {
+            interfaces: Vec::new(),
+            intents: Vec::new(),
+
+            udp_sockets: HashMap::new(),
+            tcp_listeners: HashMap::new(),
+            tcp_streams: HashMap::new(),
+            tcp_next_port: 0,
+        }
+    }
+
     /// Creates a new IO Context.
     pub fn new(ether: [u8; 6], v4: Ipv4Addr) -> Self {
         Self {
@@ -223,20 +236,14 @@ impl IOContext {
         IOCTX.with(|c| c.borrow_mut().io = Some(self))
     }
 
-    pub(crate) fn try_with_current<R>(f: impl FnOnce(&mut IOContext) -> R) -> Option<R> {
-        use super::ctx::IOCTX;
-        IOCTX.with(|c| {
-            if let Some(io) = c.borrow_mut().io.as_mut() {
-                Some(f(io))
-            } else {
-                None
-            }
-        })
-    }
-
     pub(crate) fn with_current<R>(f: impl FnOnce(&mut IOContext) -> R) -> R {
         use super::ctx::IOCTX;
-        IOCTX.with(|c| f(c.borrow_mut().io.as_mut().unwrap()))
+        IOCTX.with(|c| f(c.borrow_mut().io.as_mut().expect("Missing IO Context")))
+    }
+
+    pub(crate) fn try_with_current<R>(f: impl FnOnce(&mut IOContext) -> R) -> Option<R> {
+        use super::ctx::IOCTX;
+        IOCTX.with(|c| Some(f(c.borrow_mut().io.as_mut()?)))
     }
 
     pub(crate) fn yield_intents(&mut self) -> Vec<IOIntent> {
