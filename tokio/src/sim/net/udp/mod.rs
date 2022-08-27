@@ -227,7 +227,7 @@ impl UdpSocket {
                     .udp_sockets
                     .get_mut(&self.addr)   
                 {
-                    handle.incoming.pop()
+                    handle.incoming.pop_front()
                 } else {
                     panic!("SimContext lost socket")
                 }
@@ -280,7 +280,7 @@ impl UdpSocket {
                     .udp_sockets
                     .get_mut(&self.addr)   
                 {
-                    Ok((peer, handle.incoming.pop()))
+                    Ok((peer, handle.incoming.pop_front()))
                 } else {
                     panic!("SimContext lost socket")
                 }
@@ -362,7 +362,7 @@ impl UdpSocket {
                     .udp_sockets
                     .get_mut(&self.addr)   
                 {
-                    handle.incoming.pop()
+                    handle.incoming.pop_front()
                 } else {
                     panic!("SimContext lost socket")
                 }
@@ -406,7 +406,7 @@ impl UdpSocket {
                     .udp_sockets
                     .get_mut(&self.addr)   
                 {
-                    handle.incoming.pop()
+                    handle.incoming.pop_front()
                 } else {
                     panic!("SimContext lost socket")
                 }

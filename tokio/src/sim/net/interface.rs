@@ -212,8 +212,7 @@ impl InterfaceAddr {
                 let ip_u32 = u32::from_be_bytes(ip.octets());
                 let addr_u32 = u32::from_be_bytes(addr.octets());
                 let mask_u32 = u32::from_be_bytes(netmask.octets());
-
-                mask_u32 & ip_u32 == addr_u32
+                mask_u32 & ip_u32 == mask_u32 & addr_u32
             }
             Self::Inet6 { .. } if ip.is_ipv6() => {
                 todo!()

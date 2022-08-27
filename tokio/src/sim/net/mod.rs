@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::io::{Error, ErrorKind};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -226,7 +226,7 @@ impl IOContext {
             udp_sockets: HashMap::new(),
             tcp_listeners: HashMap::new(),
             tcp_streams: HashMap::new(),
-            tcp_next_port: 1014,
+            tcp_next_port: 1024,
         }
     }
 
@@ -259,7 +259,7 @@ impl IOContext {
         let sock = msg.dest_addr;
 
         if let Some(handle) = self.udp_sockets.get_mut(&sock) {
-            handle.incoming.push(msg);
+            handle.incoming.push_back(msg);
             handle.interests.drain(..).for_each(|w| w.waker.wake())
         } else {
             println!("Dropping UDP Message :  {:?}", msg);
@@ -278,7 +278,7 @@ impl IOContext {
             TcpConnectMessage::ClientInitiate { client, server } => {
                 // look for listener
                 if let Some(handle) = self.tcp_listeners.get_mut(&server) {
-                    handle.incoming.push(TcpListenerPendingConnection {
+                    handle.incoming.push_back(TcpListenerPendingConnection {
                         local_addr: server,
                         peer_addr: client,
                     });
@@ -326,7 +326,7 @@ impl IOContext {
     ///
     pub fn process_tcp_packet(&mut self, msg: TcpMessage) {
         if let Some(handle) = self.tcp_streams.get_mut(&(msg.dest_addr, msg.src_addr)) {
-            handle.incoming.push(msg);
+            handle.incoming.push_back(msg);
 
             let mut i = 0;
             while i < handle.interests.len() {
@@ -398,7 +398,7 @@ impl IOContext {
                 let buf = UdpSocketHandle {
                     local_addr: addr,
                     state: UdpSocketState::Bound,
-                    incoming: Vec::new(),
+                    incoming: VecDeque::new(),
 
                     ttl: 64,
                     broadcast: false,
@@ -483,7 +483,7 @@ impl IOContext {
 pub(super) struct UdpSocketHandle {
     pub(super) local_addr: SocketAddr,
     pub(super) state: UdpSocketState,
-    pub(super) incoming: Vec<UdpMessage>,
+    pub(super) incoming: VecDeque<UdpMessage>,
 
     pub(super) ttl: u32,
     pub(super) broadcast: bool,
@@ -555,7 +555,7 @@ impl IOContext {
 
         let buf = TcpListenerHandle {
             local_addr: addr,
-            incoming: Vec::new(),
+            incoming: VecDeque::new(),
             interests: Vec::new(),
 
             config: TcpSocketConfig::listener(addr),
@@ -572,7 +572,7 @@ impl IOContext {
 
     pub(self) fn tcp_accept(&mut self, addr: SocketAddr) -> Result<TcpStream> {
         if let Some(handle) = self.tcp_listeners.get_mut(&addr) {
-            let con = match handle.incoming.pop() {
+            let con = match handle.incoming.pop_front() {
                 Some(con) => con,
                 None => return Err(Error::new(ErrorKind::WouldBlock, "WouldBlock")),
             };
@@ -586,7 +586,7 @@ impl IOContext {
                 acked: true,
                 connection_failed: false,
 
-                incoming: Vec::new(),
+                incoming: VecDeque::new(),
                 config: handle.config.accept(con),
                 interests: Vec::new(),
             };
@@ -615,7 +615,7 @@ impl IOContext {
             acked: false,
             connection_failed: false,
 
-            incoming: Vec::new(),
+            incoming: VecDeque::new(),
             interests: Vec::new(),
 
             config: TcpSocketConfig::stream(addr),
@@ -661,8 +661,14 @@ impl IOContext {
 
                         if addr.port() == 0 {
                             // Grab the next one
-                            addr.set_port(self.tcp_next_port);
-                            self.tcp_next_port += 1;
+                            loop {
+                                addr.set_port(self.tcp_next_port);
+                                self.tcp_next_port += 1;
+
+                                if self.tcp_listeners.get(&addr).is_none() {
+                                    break;
+                                }
+                            }
                         } else {
                             // Check for collision
                             // TODO
@@ -706,8 +712,14 @@ impl IOContext {
                     // Ip Check now check for port number
                     if addr.port() == 0 {
                         // Grab the next one
-                        addr.set_port(self.tcp_next_port);
-                        self.tcp_next_port += 1;
+                        loop {
+                            addr.set_port(self.tcp_next_port);
+                            self.tcp_next_port += 1;
+
+                            if self.tcp_listeners.get(&addr).is_none() {
+                                break;
+                            }
+                        }
                     }
                     // Else no collision possible
                     return Ok(addr);
@@ -727,7 +739,7 @@ impl IOContext {
 pub(self) struct TcpListenerHandle {
     pub(super) local_addr: SocketAddr,
 
-    pub(super) incoming: Vec<TcpListenerPendingConnection>,
+    pub(super) incoming: VecDeque<TcpListenerPendingConnection>,
     pub(self) config: TcpSocketConfig,
     pub(super) interests: Vec<IOInterestGuard>,
 }
@@ -781,7 +793,7 @@ pub(self) struct TcpStreamHandle {
     pub(super) acked: bool,
     pub(super) connection_failed: bool,
 
-    pub(super) incoming: Vec<TcpMessage>,
+    pub(super) incoming: VecDeque<TcpMessage>,
     pub(self) config: TcpSocketConfig,
     pub(super) interests: Vec<IOInterestGuard>,
 }

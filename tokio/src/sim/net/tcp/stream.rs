@@ -136,7 +136,7 @@ impl TcpStream {
     pub fn try_read(&self, buf: &mut [u8]) -> Result<usize> {
         IOContext::with_current(|ctx| {
             if let Some(handle) = ctx.tcp_streams.get_mut(&(self.local_addr, self.peer_addr)) {
-                if let Some(msg) = handle.incoming.pop() {
+                if let Some(msg) = handle.incoming.pop_front() {
                     let n = msg.content.len().min(buf.len());
                     for i in 0..n {
                         buf[i] = msg.content[i];
@@ -227,7 +227,7 @@ impl TcpStream {
 
             let n = IOContext::with_current(|ctx| {
                 if let Some(handle) = ctx.tcp_streams.get(&(self.local_addr, self.peer_addr)) {
-                    if let Some(msg) = handle.incoming.last() {
+                    if let Some(msg) = handle.incoming.front() {
                         let n = msg.content.len().min(buf.len());
                         for i in 0..n {
                             buf[i] = msg.content[i]
@@ -370,7 +370,6 @@ impl AsyncRead for TcpStream {
     ) -> Poll<Result<()>> {
         // Await
         let interest = IOInterest::TcpRead((self.local_addr, self.peer_addr));
-
         let result = IOContext::with_current(|ctx| {
             if let Some(handle) = ctx.tcp_streams.get_mut(&(self.local_addr, self.peer_addr)) {
                 if handle.incoming.is_empty() {
@@ -381,6 +380,8 @@ impl AsyncRead for TcpStream {
 
                     Poll::Pending
                 } else {
+                    println!("{:?}", handle.incoming);
+
                     Poll::Ready(Ok(()))
                 }
             } else {
@@ -397,7 +398,9 @@ impl AsyncRead for TcpStream {
             Poll::Ready(Ok(())) => {
                 let msg = IOContext::with_current(|ctx| {
                     if let Some(handle) = ctx.tcp_streams.get_mut(&(self.local_addr, self.peer_addr)) {
-                        if let Some(msg) = handle.incoming.pop() {
+                        println!("{:?}", handle.incoming);
+
+                        if let Some(msg) = handle.incoming.pop_front() {
                             Ok(msg)
                         } else {
                             Err(Error::new(ErrorKind::WouldBlock, "WouldBlock"))
