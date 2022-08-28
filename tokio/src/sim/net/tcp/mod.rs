@@ -1,11 +1,18 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
-mod listener;
-pub use listener::*;
+pub(super) mod listener;
+pub(super) mod stream;
 
-mod stream;
-pub use stream::*;
+pub use stream::{OwnedReadHalf, OwnedWriteHalf, ReuniteError};
+
+#[derive(Debug)]
+pub(crate) struct TcpStreamInner {
+    pub(crate) local_addr: SocketAddr,
+    pub(crate) peer_addr: SocketAddr,
+
+    pub(crate) split: bool,
+}
 
 #[derive(Debug, Clone)]
 #[allow(unused)]

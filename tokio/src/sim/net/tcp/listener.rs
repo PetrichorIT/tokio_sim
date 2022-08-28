@@ -1,5 +1,5 @@
 use super::super::{addr::*, Result, IOContext, IOInterest};
-use super::TcpStream;
+use super::stream::TcpStream;
 use std::net::SocketAddr;
 use std::io::{Error, ErrorKind};
 use std::task::*;
@@ -77,7 +77,7 @@ impl TcpListener {
                     return Err(e)
                 }
             };
-            let peer = con.peer_addr;
+            let peer = con.inner.peer_addr;
 
             return Ok((con, peer))
         }

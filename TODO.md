@@ -12,3 +12,7 @@
 -   UdpSocket::read
 -   UdpSocket::write
 -   dns_resolve (Intent with wakeup)
+
+# TODOS
+
+-   TcpStream - Drop

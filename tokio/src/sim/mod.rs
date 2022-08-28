@@ -2,7 +2,7 @@
 pub mod time;
 
 cfg_net! {
-    /// SEE NET
+    /// TCP/UDP/Unix bindings for `tokio` with feature `sim`.
     pub mod net;
 }
 

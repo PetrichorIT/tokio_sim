@@ -1,4 +1,5 @@
 use super::super::{addr::*, Result, IOContext, IOIntent, IOInterest, IOInterestGuard, Interest, TcpMessage};
+use super::TcpStreamInner;
 use crate::io::{Error, ErrorKind, Ready, ReadBuf, AsyncRead, AsyncWrite};
 
 use std::net::SocketAddr;
@@ -6,12 +7,18 @@ use std::task::*;
 use std::time::Duration;
 use std::io::{IoSlice, IoSliceMut};
 use std::pin::Pin;
+use std::sync::Arc;
+
+mod owned_half;
+pub use owned_half::*;
+
+mod ref_half;
+// pub use ref_half::*;
 
 /// A TCP Stream.
 #[derive(Debug)]
 pub struct TcpStream {
-    pub(crate) local_addr: SocketAddr,
-    pub(crate) peer_addr: SocketAddr,
+    pub(crate) inner: Arc<TcpStreamInner>,
 }
 
 impl TcpStream {
@@ -33,7 +40,7 @@ impl TcpStream {
     
             loop {
                 // Initiate connect by sending a message (better repeat)
-                let interest = IOInterest::TcpConnect((this.local_addr, this.peer_addr));
+                let interest = IOInterest::TcpConnect((this.inner.local_addr, this.inner.peer_addr));
                 match interest.await {
                     Ok(()) => {},
                     Err(e) => {
@@ -43,7 +50,7 @@ impl TcpStream {
                 }
     
                 let acked = IOContext::with_current(|ctx| { 
-                    if let Some(handle) = ctx.tcp_streams.get(&(this.local_addr, this.peer_addr)) {
+                    if let Some(handle) = ctx.tcp_streams.get(&(this.inner.local_addr, this.inner.peer_addr)) {
                         Ok(handle.acked)
                     } else {
                         Err(Error::new(
@@ -74,7 +81,7 @@ impl TcpStream {
 
     /// Returns the local address that this stream is bound to.
     pub fn local_addr(&self) -> Result<SocketAddr> {
-        Ok(self.local_addr)
+        Ok(self.inner.local_addr)
     }
 
     /// DEPRECATED
@@ -86,7 +93,7 @@ impl TcpStream {
 
     /// Returns the remote address that this stream is connected to.
     pub fn peer_addr(&self) -> Result<SocketAddr> {
-        Ok(self.peer_addr)
+        Ok(self.inner.peer_addr)
     }
 
     /// DEPRECATED
@@ -106,7 +113,7 @@ impl TcpStream {
     /// It can be used to concurrently read / write to the same socket on a single task 
     /// without splitting the socket.
     pub async fn ready(&self, interest: Interest) -> Result<Ready> {
-        let (io_interest, ready) = interest.tcp_io_interest(self.local_addr, self.peer_addr);
+        let (io_interest, ready) = interest.tcp_io_interest(self.inner.local_addr, self.inner.peer_addr);
         io_interest.await?;
         Ok(ready)
     }
@@ -135,7 +142,7 @@ impl TcpStream {
     /// and can exist entirely on the stack.
     pub fn try_read(&self, buf: &mut [u8]) -> Result<usize> {
         IOContext::with_current(|ctx| {
-            if let Some(handle) = ctx.tcp_streams.get_mut(&(self.local_addr, self.peer_addr)) {
+            if let Some(handle) = ctx.tcp_streams.get_mut(&(self.inner.local_addr, self.inner.peer_addr)) {
                 if let Some(msg) = handle.incoming.pop_front() {
                     let n = msg.content.len().min(buf.len());
                     for i in 0..n {
@@ -185,8 +192,8 @@ impl TcpStream {
         IOContext::with_current(|ctx| {
             let content = Vec::from(buf);
             let msg = TcpMessage {
-                src_addr: self.local_addr,
-                dest_addr: self.peer_addr,
+                src_addr: self.inner.local_addr,
+                dest_addr: self.inner.peer_addr,
                 content,
                 ttl: 64,
             };
@@ -222,11 +229,11 @@ impl TcpStream {
     /// This is accomplished by passing MSG_PEEK as a flag to the underlying recv system call.
     pub async fn peek(&self, buf: &mut [u8]) -> Result<usize> {
         loop {
-            let interest = IOInterest::TcpRead((self.local_addr, self.peer_addr));
+            let interest = IOInterest::TcpRead((self.inner.local_addr, self.inner.peer_addr));
             interest.await?;
 
             let n = IOContext::with_current(|ctx| {
-                if let Some(handle) = ctx.tcp_streams.get(&(self.local_addr, self.peer_addr)) {
+                if let Some(handle) = ctx.tcp_streams.get(&(self.inner.local_addr, self.inner.peer_addr)) {
                     if let Some(msg) = handle.incoming.front() {
                         let n = msg.content.len().min(buf.len());
                         for i in 0..n {
@@ -261,7 +268,7 @@ impl TcpStream {
     /// For more information about this option, see [set_nodelay].
     pub fn nodelay(&self) -> Result<bool> {
         IOContext::with_current(|ctx| {
-            if let Some(handle) = ctx.tcp_streams.get(&(self.local_addr, self.peer_addr)) {
+            if let Some(handle) = ctx.tcp_streams.get(&(self.inner.local_addr, self.inner.peer_addr)) {
                 Ok(handle.config.nodelay)
             } else {
                 Err(Error::new(
@@ -281,7 +288,7 @@ impl TcpStream {
     /// thereby avoiding the frequent sending of small packets.
     pub fn set_nodelay(&self, nodelay: bool) -> Result<()> {
         IOContext::with_current(|ctx| {
-            if let Some(handle) = ctx.tcp_streams.get_mut(&(self.local_addr, self.peer_addr)) {
+            if let Some(handle) = ctx.tcp_streams.get_mut(&(self.inner.local_addr, self.inner.peer_addr)) {
                 handle.config.nodelay = nodelay;
                 Ok(())
             } else {
@@ -298,7 +305,7 @@ impl TcpStream {
     /// For more information about this option, see [set_linger].
     pub fn linger(&self) -> Result<Option<Duration>> {
         IOContext::with_current(|ctx| {
-            if let Some(handle) = ctx.tcp_streams.get(&(self.local_addr, self.peer_addr)) {
+            if let Some(handle) = ctx.tcp_streams.get(&(self.inner.local_addr, self.inner.peer_addr)) {
                 Ok(handle.config.linger)
             } else {
                 Err(Error::new(
@@ -316,7 +323,7 @@ impl TcpStream {
     /// until it can transmit the data or until the time expires.
     pub fn set_linger(&self, dur: Option<Duration>) -> Result<()> {
         IOContext::with_current(|ctx| {
-            if let Some(handle) = ctx.tcp_streams.get_mut(&(self.local_addr, self.peer_addr)) {
+            if let Some(handle) = ctx.tcp_streams.get_mut(&(self.inner.local_addr, self.inner.peer_addr)) {
                 handle.config.linger = dur;
                 Ok(())
             } else {
@@ -333,7 +340,7 @@ impl TcpStream {
     /// For more information about this option, see [set_ttl].
     pub fn ttl(&self) -> Result<u32> {
         IOContext::with_current(|ctx| {
-            if let Some(handle) = ctx.tcp_streams.get(&(self.local_addr, self.peer_addr)) {
+            if let Some(handle) = ctx.tcp_streams.get(&(self.inner.local_addr, self.inner.peer_addr)) {
                 Ok(handle.config.ttl)
             } else {
                 Err(Error::new(
@@ -349,7 +356,7 @@ impl TcpStream {
     /// This value sets the time-to-live field that is used in every packet sent from this socket.
     pub fn set_ttl(&self, ttl: u32) -> Result<()> {
         IOContext::with_current(|ctx| {
-            if let Some(handle) = ctx.tcp_streams.get_mut(&(self.local_addr, self.peer_addr)) {
+            if let Some(handle) = ctx.tcp_streams.get_mut(&(self.inner.local_addr, self.inner.peer_addr)) {
                 handle.config.ttl = ttl;
                 Ok(())
             } else {
@@ -360,6 +367,11 @@ impl TcpStream {
             }
         })
     }
+
+    /// Splits a `TcpStream` into a read half and a write half, which can be used to read and write the stream concurrently.
+    pub fn into_split(self) -> (OwnedReadHalf, OwnedWriteHalf) {
+        (OwnedReadHalf { inner: self.inner.clone() }, OwnedWriteHalf { inner: self.inner })
+    }
 }
 
 impl AsyncRead for TcpStream {
@@ -369,9 +381,9 @@ impl AsyncRead for TcpStream {
         buf: &mut ReadBuf<'_>
     ) -> Poll<Result<()>> {
         // Await
-        let interest = IOInterest::TcpRead((self.local_addr, self.peer_addr));
+        let interest = IOInterest::TcpRead((self.inner.local_addr, self.inner.peer_addr));
         let result = IOContext::with_current(|ctx| {
-            if let Some(handle) = ctx.tcp_streams.get_mut(&(self.local_addr, self.peer_addr)) {
+            if let Some(handle) = ctx.tcp_streams.get_mut(&(self.inner.local_addr, self.inner.peer_addr)) {
                 if handle.incoming.is_empty() {
                     handle.interests.push(IOInterestGuard {
                         interest: interest.clone(),
@@ -397,7 +409,7 @@ impl AsyncRead for TcpStream {
             Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
             Poll::Ready(Ok(())) => {
                 let msg = IOContext::with_current(|ctx| {
-                    if let Some(handle) = ctx.tcp_streams.get_mut(&(self.local_addr, self.peer_addr)) {
+                    if let Some(handle) = ctx.tcp_streams.get_mut(&(self.inner.local_addr, self.inner.peer_addr)) {
                         println!("{:?}", handle.incoming);
 
                         if let Some(msg) = handle.incoming.pop_front() {

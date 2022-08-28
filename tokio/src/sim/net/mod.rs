@@ -3,13 +3,15 @@ use std::future::Future;
 use std::io::{Error, ErrorKind};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 
 pub(crate) use std::io::Result;
 
-mod interface;
-pub use interface::*;
+/// Network interfaces.
+pub mod interface;
+use interface::*;
 
 mod addr;
 pub use addr::*;
@@ -20,8 +22,12 @@ pub use lookup_host::*;
 mod udp;
 pub use udp::*;
 
-mod tcp;
-pub use tcp::*;
+/// TCP utility types.
+pub mod tcp;
+use tcp::{TcpSocketConfig, TcpStreamInner};
+
+pub use tcp::listener::TcpListener;
+pub use tcp::stream::TcpStream;
 
 mod interest;
 pub use interest::*;
@@ -593,8 +599,12 @@ impl IOContext {
             self.tcp_streams
                 .insert((con.local_addr, con.peer_addr), buf);
             Ok(TcpStream {
-                local_addr: con.local_addr,
-                peer_addr: con.peer_addr,
+                inner: Arc::new(TcpStreamInner {
+                    local_addr: con.local_addr,
+                    peer_addr: con.peer_addr,
+
+                    split: false,
+                }),
             })
         } else {
             Err(Error::new(
@@ -624,8 +634,12 @@ impl IOContext {
         self.tcp_streams.insert((addr, peer), buf);
 
         return Ok(TcpStream {
-            local_addr: addr,
-            peer_addr: peer,
+            inner: Arc::new(TcpStreamInner {
+                local_addr: addr,
+                peer_addr: peer,
+
+                split: false,
+            }),
         });
     }
 
