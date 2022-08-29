@@ -16,6 +16,9 @@ use interface::*;
 mod addr;
 pub use addr::*;
 
+mod buffer;
+use buffer::SocketBuffer;
+
 mod lookup_host;
 pub use lookup_host::*;
 
@@ -32,6 +35,31 @@ pub use tcp::stream::TcpStream;
 
 mod interest;
 pub use interest::*;
+
+/// Gets the mac address.
+pub fn get_mac_address() -> Result<Option<[u8; 6]>> {
+    IOContext::with_current(|ctx| {
+        for interface in &ctx.interfaces {
+            for addr in &interface.addrs {
+                if let InterfaceAddr::Ether { addr } = addr {
+                    return Ok(Some(*addr));
+                }
+            }
+        }
+        Ok(None)
+    })
+}
+
+/// Gets the ip addr
+pub fn get_ip() -> Option<IpAddr> {
+    IOContext::with_current(|ctx| {
+        let bind = ctx.bind_addr(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0));
+        match bind {
+            Ok(v) => Some(v.ip()),
+            Err(_) => None,
+        }
+    })
+}
 
 /// A action that must be managed by the simulation core since it supercedes
 /// the limits of the current network node.
@@ -256,6 +284,46 @@ impl IOContext {
     pub(crate) fn yield_intents(&mut self) -> Vec<IOIntent> {
         let mut swap = Vec::new();
         std::mem::swap(&mut swap, &mut self.intents);
+
+        // # TCP message creation
+        for (_, handle) in self.tcp_streams.iter_mut() {
+            let mut offset = 0;
+
+            // Send full packets
+            while handle.outgoing.len() - offset > 1024 {
+                let mut content = Vec::with_capacity(1024);
+                for i in 0..1024 {
+                    content.push(handle.outgoing[offset + i])
+                }
+                offset += 1024;
+
+                swap.push(IOIntent::TcpSendPacket(TcpMessage {
+                    content,
+                    ttl: handle.config.ttl,
+                    dest_addr: handle.peer_addr,
+                    src_addr: handle.local_addr,
+                }));
+            }
+
+            let rem = handle.outgoing.len() - offset;
+
+            if rem > 0 {
+                let mut content = Vec::with_capacity(rem);
+                for i in 0..rem {
+                    content.push(handle.outgoing[offset + i])
+                }
+
+                swap.push(IOIntent::TcpSendPacket(TcpMessage {
+                    content,
+                    ttl: handle.config.ttl,
+                    dest_addr: handle.peer_addr,
+                    src_addr: handle.local_addr,
+                }));
+            }
+
+            handle.outgoing.clear();
+        }
+
         swap
     }
 
@@ -268,7 +336,11 @@ impl IOContext {
         match msg.dest_addr.ip() {
             IpAddr::V4(ip) if ip.is_broadcast() => {
                 // all socket receive
-                for (_, handle) in self.udp_sockets.iter_mut() {
+                for (_, handle) in self
+                    .udp_sockets
+                    .iter_mut()
+                    .filter(|(k, _)| k.port() == msg.dest_addr.port())
+                {
                     handle.incoming.push_back(msg.clone());
                     handle.interests.drain(..).for_each(|w| w.waker.wake())
                 }
@@ -341,7 +413,7 @@ impl IOContext {
     ///
     pub fn process_tcp_packet(&mut self, msg: TcpMessage) {
         if let Some(handle) = self.tcp_streams.get_mut(&(msg.dest_addr, msg.src_addr)) {
-            handle.incoming.push_back(msg);
+            handle.incoming.add(msg.content);
 
             let mut i = 0;
             while i < handle.interests.len() {
@@ -392,45 +464,25 @@ impl IOContext {
     }
 
     pub(self) fn udp_bind(&mut self, addr: SocketAddr) -> Result<UdpSocket> {
-        // (1) check loopback;
-        if addr.ip().is_loopback() {
-            if let Some(lo0) = self.interfaces.iter().find(|i| i.flags.loopback) {
-                // Find buffer
-                if self.udp_sockets.get(&addr).is_some() {
-                    return Err(Error::new(ErrorKind::AddrInUse, "Address allready in use"));
-                }
+        let addr = self.bind_addr(addr)?;
 
-                // Check status
-                if lo0.status == InterfaceStatus::Inactive {
-                    return Err(Error::new(ErrorKind::NotFound, "Interface inactive"));
-                }
+        let buf = UdpSocketHandle {
+            local_addr: addr,
+            state: UdpSocketState::Bound,
+            incoming: VecDeque::new(),
 
-                if !lo0.flags.up {
-                    return Err(Error::new(ErrorKind::NotFound, "Interface down"));
-                }
+            ttl: 64,
+            broadcast: false,
+            multicast_loop_v4: false,
+            multicast_loop_v6: false,
+            multicast_ttl_v4: 64,
 
-                // TODO: Check addr
-                let buf = UdpSocketHandle {
-                    local_addr: addr,
-                    state: UdpSocketState::Bound,
-                    incoming: VecDeque::new(),
+            interests: Vec::new(),
+        };
 
-                    ttl: 64,
-                    broadcast: false,
-                    multicast_loop_v4: false,
-                    multicast_loop_v6: false,
-                    multicast_ttl_v4: 64,
+        self.udp_sockets.insert(addr, buf);
 
-                    interests: Vec::new(),
-                };
-
-                self.udp_sockets.insert(addr, buf);
-
-                return Ok(UdpSocket { addr });
-            }
-        }
-
-        Err(Error::new(ErrorKind::Other, "TODO"))
+        return Ok(UdpSocket { addr });
     }
 
     pub(self) fn udp_send(
@@ -580,7 +632,7 @@ impl IOContext {
         addr: SocketAddr,
         config: Option<TcpSocketConfig>,
     ) -> Result<TcpListener> {
-        let addr = self.tcp_bind_addr(addr)?;
+        let addr = self.bind_addr(addr)?;
 
         let buf = TcpListenerHandle {
             local_addr: addr,
@@ -615,9 +667,11 @@ impl IOContext {
                 acked: true,
                 connection_failed: false,
 
-                incoming: VecDeque::new(),
-                config: handle.config.accept(con),
+                incoming: SocketBuffer::new(),
                 interests: Vec::new(),
+                outgoing: Vec::with_capacity(256),
+
+                config: handle.config.accept(con),
             };
             self.tcp_streams
                 .insert((con.local_addr, con.peer_addr), buf);
@@ -641,7 +695,7 @@ impl IOContext {
         config: Option<TcpSocketConfig>,
     ) -> Result<TcpStream> {
         //TODO Check peer validity
-        let addr = self.tcp_bind_addr(
+        let addr = self.bind_addr(
             config
                 .as_ref()
                 .map(|c| c.addr)
@@ -655,8 +709,9 @@ impl IOContext {
             acked: false,
             connection_failed: false,
 
-            incoming: VecDeque::new(),
+            incoming: SocketBuffer::new(),
             interests: Vec::new(),
+            outgoing: Vec::with_capacity(256),
 
             config: config.unwrap_or(TcpSocketConfig::stream(addr)),
         };
@@ -670,9 +725,11 @@ impl IOContext {
             }),
         });
     }
+}
 
+impl IOContext {
     // Finds and confirms an address.
-    fn tcp_bind_addr(&mut self, mut addr: SocketAddr) -> Result<SocketAddr> {
+    fn bind_addr(&mut self, mut addr: SocketAddr) -> Result<SocketAddr> {
         if addr.ip().is_unspecified() {
             // # Case 1: Unspecified address.
 
@@ -719,7 +776,6 @@ impl IOContext {
                         return Ok(addr);
                     }
                 }
-
                 // WELP next interface
             }
 
@@ -835,9 +891,11 @@ pub(self) struct TcpStreamHandle {
     pub(super) acked: bool,
     pub(super) connection_failed: bool,
 
-    pub(super) incoming: VecDeque<TcpMessage>,
-    pub(self) config: TcpSocketConfig,
+    pub(super) incoming: SocketBuffer,
     pub(super) interests: Vec<IOInterestGuard>,
+    pub(super) outgoing: Vec<u8>,
+
+    pub(self) config: TcpSocketConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

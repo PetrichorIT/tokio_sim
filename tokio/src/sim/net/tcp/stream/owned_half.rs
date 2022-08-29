@@ -55,33 +55,17 @@ impl OwnedReadHalf {
             interest.await?;
 
             let n = IOContext::with_current(|ctx| {
-                if let Some(handle) = ctx.tcp_streams.get(&(self.inner.local_addr, self.inner.peer_addr)) {
-                    if let Some(msg) = handle.incoming.front() {
-                        let n = msg.content.len().min(buf.len());
-                        for i in 0..n {
-                            buf[i] = msg.content[i]
-                        }
-                        Ok(n)
-                    } else {
-                        Err(Error::new(ErrorKind::WouldBlock, "WouldBlock"))
-                    }
+                if let Some(handle) = ctx.tcp_streams.get_mut(&(self.inner.local_addr, self.inner.peer_addr)) {
+                    Ok(handle.incoming.peek(buf))
                 } else {
                     Err(Error::new(
                         ErrorKind::Other,
                         "Simulation context has dropped TcpStream",
                     ))
                 }
-            });
+            })?;
 
-            match n {
-                Ok(n) => return Ok(n),
-                Err(e) => {
-                    if e.kind() == ErrorKind::WouldBlock {
-                        continue;
-                    }
-                    return Err(e);
-                }
-            }
+            if n != 0 { return Ok(n) }
         }
     }
 
@@ -136,11 +120,8 @@ impl OwnedReadHalf {
     pub fn try_read(&self, buf: &mut [u8]) -> Result<usize> {
         IOContext::with_current(|ctx| {
             if let Some(handle) = ctx.tcp_streams.get_mut(&(self.inner.local_addr, self.inner.peer_addr)) {
-                if let Some(msg) = handle.incoming.pop_front() {
-                    let n = msg.content.len().min(buf.len());
-                    for i in 0..n {
-                        buf[i] = msg.content[i];
-                    }
+                let n = handle.incoming.read(buf);
+                if n > 0 {
                     Ok(n)
                 } else {
                     Err(Error::new(ErrorKind::WouldBlock, "No message could be received non-blocking"))
@@ -254,21 +235,20 @@ impl AsyncRead for OwnedReadHalf {
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>
     ) -> Poll<Result<()>> {
-        // Await
-        let interest = IOInterest::TcpRead((self.inner.local_addr, self.inner.peer_addr));
-        let result = IOContext::with_current(|ctx| {
+        // Whenever polled -- try to fill the buffer first
+        IOContext::with_current(|ctx| {
             if let Some(handle) = ctx.tcp_streams.get_mut(&(self.inner.local_addr, self.inner.peer_addr)) {
-                if handle.incoming.is_empty() {
+                let old = buf.remaining();
+                let remaining = handle.incoming.read_buf(buf);
+                if old != remaining {
+                    Poll::Ready(Ok(()))
+                } else {
+                    let interest = IOInterest::TcpRead((self.inner.local_addr, self.inner.peer_addr));
                     handle.interests.push(IOInterestGuard {
                         interest: interest.clone(),
                         waker: cx.waker().clone(),
                     });
-
                     Poll::Pending
-                } else {
-                    println!("{:?}", handle.incoming);
-
-                    Poll::Ready(Ok(()))
                 }
             } else {
                 Poll::Ready(Err(Error::new(
@@ -276,48 +256,7 @@ impl AsyncRead for OwnedReadHalf {
                     "Simulation context has dropped TcpStream",
                 )))
             }
-        });
-
-        match result {
-            Poll::Pending => return Poll::Pending,
-            Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-            Poll::Ready(Ok(())) => {
-                let msg = IOContext::with_current(|ctx| {
-                    if let Some(handle) = ctx.tcp_streams.get_mut(&(self.inner.local_addr, self.inner.peer_addr)) {
-                        println!("{:?}", handle.incoming);
-
-                        if let Some(msg) = handle.incoming.pop_front() {
-                            Ok(msg)
-                        } else {
-                            Err(Error::new(ErrorKind::WouldBlock, "WouldBlock"))
-                        }
-                    } else {
-                        Err(Error::new(
-                            ErrorKind::Other,
-                            "Simulation context has dropped TcpStream",
-                        ))
-                    }
-                });
-
-                match msg {
-                    Ok(msg) => {
-                        let pre_filled = buf.filled().len();
-                        let buffer = buf.initialize_unfilled();
-
-                        let n = msg.content.len().min(buffer.len());
-                        for i in 0..n {
-                            buffer[i] = msg.content[i];
-                        }
-
-                        buf.set_filled(pre_filled + n);
-
-                        Poll::Ready(Ok(()))
-                    },
-                    Err(e) if e.kind() == ErrorKind::WouldBlock => Poll::Pending,
-                    Err(e) => return Poll::Ready(Err(e))
-                }
-            }
-        }
+        })
     }
 }
 

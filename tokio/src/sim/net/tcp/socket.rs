@@ -125,11 +125,7 @@ impl TcpSocket {
     ///
     /// Will fail on windows if called before bind.
     pub fn local_addr(&self) -> Result<SocketAddr> {
-        if self.config.borrow().addr.ip().is_unspecified() {
-            Err(Error::new(ErrorKind::Other, "No Addr bound"))
-        } else {
-            Ok(self.config.borrow().addr)
-        }
+        Ok(self.config.borrow().addr)
     }
 
     /// Returns the value of the SO_ERROR option.
