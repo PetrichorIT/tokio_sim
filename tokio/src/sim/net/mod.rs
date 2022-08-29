@@ -27,6 +27,7 @@ pub mod tcp;
 use tcp::{TcpSocketConfig, TcpStreamInner};
 
 pub use tcp::listener::TcpListener;
+pub use tcp::socket::TcpSocket;
 pub use tcp::stream::TcpStream;
 
 mod interest;
@@ -264,13 +265,21 @@ impl IOContext {
     pub fn process_udp(&mut self, msg: UdpMessage) {
         let sock = msg.dest_addr;
 
-        if let Some(handle) = self.udp_sockets.get_mut(&sock) {
-            handle.incoming.push_back(msg);
-            handle.interests.drain(..).for_each(|w| w.waker.wake())
-        } else {
-            println!("Dropping UDP Message :  {:?}", msg);
-            for info in self.udp_sockets() {
-                println!("- {:?}", info)
+        match msg.dest_addr.ip() {
+            IpAddr::V4(ip) if ip.is_broadcast() => {
+                // all socket receive
+                for (_, handle) in self.udp_sockets.iter_mut() {
+                    handle.incoming.push_back(msg.clone());
+                    handle.interests.drain(..).for_each(|w| w.waker.wake())
+                }
+            }
+            _ => {
+                if let Some(handle) = self.udp_sockets.get_mut(&sock) {
+                    handle.incoming.push_back(msg);
+                    handle.interests.drain(..).for_each(|w| w.waker.wake())
+                } else {
+                    println!("Dropping UDP Message :  {:?}", msg);
+                }
             }
         }
     }
@@ -430,7 +439,7 @@ impl IOContext {
         dest_addr: SocketAddr,
         content: Vec<u8>,
     ) -> Result<()> {
-        // (1) Check a socket exits
+        // (1.1) Check a socket exits
         let handle = match self.udp_sockets.get(&src_addr) {
             Some(v) => v,
             None => {
@@ -440,6 +449,16 @@ impl IOContext {
                 ))
             }
         };
+
+        // (1.2) Check Broadcast
+        if let IpAddr::V4(dest_addr) = dest_addr.ip() {
+            if dest_addr.is_broadcast() && !handle.broadcast {
+                return Err(Error::new(
+                    ErrorKind::Other,
+                    "Cannot send broadcast without broadcast flag enabled",
+                ));
+            }
+        }
 
         // (2) Build Message
         let msg = UdpMessage {
@@ -556,7 +575,11 @@ pub struct UdpMessage {
 // == TCP ==
 
 impl IOContext {
-    pub(self) fn tcp_bind_listener(&mut self, addr: SocketAddr) -> Result<TcpListener> {
+    pub(self) fn tcp_bind_listener(
+        &mut self,
+        addr: SocketAddr,
+        config: Option<TcpSocketConfig>,
+    ) -> Result<TcpListener> {
         let addr = self.tcp_bind_addr(addr)?;
 
         let buf = TcpListenerHandle {
@@ -564,7 +587,7 @@ impl IOContext {
             incoming: VecDeque::new(),
             interests: Vec::new(),
 
-            config: TcpSocketConfig::listener(addr),
+            config: config.unwrap_or(TcpSocketConfig::listener(addr)),
         };
 
         self.tcp_listeners.insert(addr, buf);
@@ -602,8 +625,6 @@ impl IOContext {
                 inner: Arc::new(TcpStreamInner {
                     local_addr: con.local_addr,
                     peer_addr: con.peer_addr,
-
-                    split: false,
                 }),
             })
         } else {
@@ -614,9 +635,18 @@ impl IOContext {
         }
     }
 
-    pub(self) fn tcp_bind_stream(&mut self, peer: SocketAddr) -> Result<TcpStream> {
+    pub(self) fn tcp_bind_stream(
+        &mut self,
+        peer: SocketAddr,
+        config: Option<TcpSocketConfig>,
+    ) -> Result<TcpStream> {
         //TODO Check peer validity
-        let addr = self.tcp_bind_addr(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0))?;
+        let addr = self.tcp_bind_addr(
+            config
+                .as_ref()
+                .map(|c| c.addr)
+                .unwrap_or(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)),
+        )?;
 
         let buf = TcpStreamHandle {
             local_addr: addr,
@@ -628,7 +658,7 @@ impl IOContext {
             incoming: VecDeque::new(),
             interests: Vec::new(),
 
-            config: TcpSocketConfig::stream(addr),
+            config: config.unwrap_or(TcpSocketConfig::stream(addr)),
         };
 
         self.tcp_streams.insert((addr, peer), buf);
@@ -637,8 +667,6 @@ impl IOContext {
             inner: Arc::new(TcpStreamInner {
                 local_addr: addr,
                 peer_addr: peer,
-
-                split: false,
             }),
         });
     }

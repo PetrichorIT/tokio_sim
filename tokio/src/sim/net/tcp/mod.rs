@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 pub(super) mod listener;
+pub(super) mod socket;
 pub(super) mod stream;
 
 pub use stream::{OwnedReadHalf, OwnedWriteHalf, ReuniteError};
@@ -10,8 +11,6 @@ pub use stream::{OwnedReadHalf, OwnedWriteHalf, ReuniteError};
 pub(crate) struct TcpStreamInner {
     pub(crate) local_addr: SocketAddr,
     pub(crate) peer_addr: SocketAddr,
-
-    pub(crate) split: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -33,6 +32,24 @@ pub(super) struct TcpSocketConfig {
 }
 
 impl TcpSocketConfig {
+    pub(super) fn socket() -> TcpSocketConfig {
+        TcpSocketConfig {
+            addr: "0.0.0.0:0".parse::<SocketAddr>().unwrap(),
+            linger: None,
+
+            listen_backlog: 32,
+            recv_buffer_size: 2048,
+            send_buffer_size: 2048,
+            reuseaddr: true,
+            reuseport: true,
+
+            connect_timeout: Duration::from_secs(2),
+            nodelay: true,
+
+            ttl: 64,
+        }
+    }
+
     pub(super) fn listener(addr: SocketAddr) -> TcpSocketConfig {
         TcpSocketConfig {
             addr,

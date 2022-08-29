@@ -35,7 +35,7 @@ impl TcpStream {
 
         for peer in addrs {
             let this = IOContext::with_current(|ctx| {
-                ctx.tcp_bind_stream(peer)
+                ctx.tcp_bind_stream(peer, None)
             })?;
     
             loop {

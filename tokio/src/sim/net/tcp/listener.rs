@@ -43,7 +43,7 @@ impl TcpListener {
             let mut last_err = None;
 
             for addr in addrs {
-                match ctx.tcp_bind_listener(addr) {
+                match ctx.tcp_bind_listener(addr, None) {
                     Ok(socket) => return Ok(socket),
                     Err(e) => last_err = Some(e),
                 }
