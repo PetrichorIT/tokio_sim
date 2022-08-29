@@ -1,10 +1,12 @@
+use super::Result;
+use crate::io::{Error, ErrorKind, ReadBuf};
 use std::collections::VecDeque;
 
-use crate::io::ReadBuf;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct SocketBuffer {
+pub(crate) struct SocketIncomingBuffer {
     buffers: VecDeque<PartialBuffer>,
+    len: usize,
+    limit: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,18 +21,30 @@ impl PartialBuffer {
     }
 }
 
-impl SocketBuffer {
-    pub(crate) fn new() -> SocketBuffer {
+impl SocketIncomingBuffer {
+    pub(crate) fn new(limit: u32) -> SocketIncomingBuffer {
         Self {
             buffers: VecDeque::with_capacity(8),
+            len: 0,
+            limit: limit as usize,
         }
     }
 
     pub(crate) fn add(&mut self, buf: Vec<u8>) {
-        self.buffers.push_back(PartialBuffer {
-            buffer: buf,
-            consumed: 0,
-        });
+        self.len += buf.len();
+        if self.len > self.limit {
+            // TODO: Temprarily this will not be active but soon
+            eprintln!("Recv buffer size exceeded");
+            self.buffers.push_back(PartialBuffer {
+                buffer: buf,
+                consumed: 0,
+            });
+        } else {
+            self.buffers.push_back(PartialBuffer {
+                buffer: buf,
+                consumed: 0,
+            });
+        }
     }
 
     pub(crate) fn is_empty(&self) -> bool {
@@ -50,6 +64,8 @@ impl SocketBuffer {
             if self.buffers[0].remaining() == 0 {
                 let _ = self.buffers.pop_front();
             }
+
+            self.len -= n;
             required -= n;
         }
 
@@ -74,6 +90,7 @@ impl SocketBuffer {
                 let _ = self.buffers.pop_front();
             }
             required -= n;
+            self.len -= n;
             offset += n;
         }
 
@@ -101,5 +118,61 @@ impl SocketBuffer {
         }
 
         buf.len() - required
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SocketOutgoingBuffer {
+    packets: Vec<Vec<u8>>,
+    len: usize,
+    limit: usize,
+}
+
+impl SocketOutgoingBuffer {
+    pub(crate) fn new(limit: u32) -> SocketOutgoingBuffer {
+        SocketOutgoingBuffer {
+            packets: Vec::new(),
+            len: 0,
+            limit: limit as usize,
+        }
+    }
+
+    pub(crate) fn write(&mut self, mut buf: &[u8]) -> Result<()> {
+        while buf.len() > 0 && self.limit != self.len {
+            let pkt = if let Some(pkt) = self.packets.last_mut() {
+                pkt
+            } else {
+                self.packets.push(Vec::with_capacity(1024));
+                self.packets.last_mut().unwrap()
+            };
+
+            // the number of bytes to be written
+            let n = buf.len().min(1024 - pkt.len()).min(self.limit - self.len);
+            let offset = pkt.len();
+
+            // Extended buffer
+            self.len += n;
+            unsafe { pkt.set_len(offset + n) };
+            pkt[offset..(offset + n)].copy_from_slice(&buf[..n]);
+
+            buf = &buf[n..]
+        }
+
+        if buf.len() == 0 {
+            Ok(())
+        } else {
+            Err(Error::new(
+                ErrorKind::OutOfMemory,
+                "Send buffer size exceeded",
+            ))
+        }
+    }
+
+    pub(crate) fn yield_packets(&mut self) -> Vec<Vec<u8>> {
+        self.len = 0;
+
+        let mut swap = Vec::new();
+        std::mem::swap(&mut swap, &mut self.packets);
+        swap
     }
 }

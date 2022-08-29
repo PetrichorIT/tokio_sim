@@ -17,7 +17,8 @@ mod addr;
 pub use addr::*;
 
 mod buffer;
-use buffer::SocketBuffer;
+use buffer::SocketIncomingBuffer;
+use buffer::SocketOutgoingBuffer;
 
 mod lookup_host;
 pub use lookup_host::*;
@@ -287,41 +288,14 @@ impl IOContext {
 
         // # TCP message creation
         for (_, handle) in self.tcp_streams.iter_mut() {
-            let mut offset = 0;
-
-            // Send full packets
-            while handle.outgoing.len() - offset > 1024 {
-                let mut content = Vec::with_capacity(1024);
-                for i in 0..1024 {
-                    content.push(handle.outgoing[offset + i])
-                }
-                offset += 1024;
-
+            for packet in handle.outgoing.yield_packets() {
                 swap.push(IOIntent::TcpSendPacket(TcpMessage {
-                    content,
+                    content: packet,
                     ttl: handle.config.ttl,
                     dest_addr: handle.peer_addr,
                     src_addr: handle.local_addr,
                 }));
             }
-
-            let rem = handle.outgoing.len() - offset;
-
-            if rem > 0 {
-                let mut content = Vec::with_capacity(rem);
-                for i in 0..rem {
-                    content.push(handle.outgoing[offset + i])
-                }
-
-                swap.push(IOIntent::TcpSendPacket(TcpMessage {
-                    content,
-                    ttl: handle.config.ttl,
-                    dest_addr: handle.peer_addr,
-                    src_addr: handle.local_addr,
-                }));
-            }
-
-            handle.outgoing.clear();
         }
 
         swap
@@ -660,6 +634,8 @@ impl IOContext {
 
             assert_eq!(con.local_addr, addr);
 
+            let config = handle.config.accept(con);
+
             let buf = TcpStreamHandle {
                 local_addr: con.local_addr,
                 peer_addr: con.peer_addr,
@@ -667,11 +643,11 @@ impl IOContext {
                 acked: true,
                 connection_failed: false,
 
-                incoming: SocketBuffer::new(),
+                incoming: SocketIncomingBuffer::new(config.recv_buffer_size),
                 interests: Vec::new(),
-                outgoing: Vec::with_capacity(256),
+                outgoing: SocketOutgoingBuffer::new(config.send_buffer_size),
 
-                config: handle.config.accept(con),
+                config,
             };
             self.tcp_streams
                 .insert((con.local_addr, con.peer_addr), buf);
@@ -702,6 +678,8 @@ impl IOContext {
                 .unwrap_or(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)),
         )?;
 
+        let config = config.unwrap_or(TcpSocketConfig::stream(addr));
+
         let buf = TcpStreamHandle {
             local_addr: addr,
             peer_addr: peer,
@@ -709,11 +687,11 @@ impl IOContext {
             acked: false,
             connection_failed: false,
 
-            incoming: SocketBuffer::new(),
+            incoming: SocketIncomingBuffer::new(config.recv_buffer_size),
             interests: Vec::new(),
-            outgoing: Vec::with_capacity(256),
+            outgoing: SocketOutgoingBuffer::new(config.send_buffer_size),
 
-            config: config.unwrap_or(TcpSocketConfig::stream(addr)),
+            config,
         };
 
         self.tcp_streams.insert((addr, peer), buf);
@@ -891,9 +869,9 @@ pub(self) struct TcpStreamHandle {
     pub(super) acked: bool,
     pub(super) connection_failed: bool,
 
-    pub(super) incoming: SocketBuffer,
+    pub(super) incoming: SocketIncomingBuffer,
     pub(super) interests: Vec<IOInterestGuard>,
-    pub(super) outgoing: Vec<u8>,
+    pub(super) outgoing: SocketOutgoingBuffer,
 
     pub(self) config: TcpSocketConfig,
 }

@@ -1,7 +1,7 @@
 use super::super::TcpStreamInner;
 use super::TcpStream;
 
-use crate::sim::net::{TcpMessage, IOContext, IOInterest, IOInterestGuard, Interest, IOIntent, Result};
+use crate::sim::net::{IOContext, IOInterest, IOInterestGuard, Interest, Result};
 use crate::io::{Ready, ReadBuf, AsyncRead, AsyncWrite};
 
 use std::io::{Error, ErrorKind, IoSliceMut, IoSlice};
@@ -207,16 +207,12 @@ impl OwnedWriteHalf {
     /// This function is usually paired with writable().
     pub fn try_write(&self, buf: &[u8]) -> Result<usize> {
         IOContext::with_current(|ctx| {
-            let content = Vec::from(buf);
-            let msg = TcpMessage {
-                src_addr: self.inner.local_addr,
-                dest_addr: self.inner.peer_addr,
-                content,
-                ttl: 64,
-            };
-            
-            ctx.intents.push(IOIntent::TcpSendPacket(msg));
-            Ok(buf.len())
+            if let Some(handle) = ctx.tcp_streams.get_mut(&(self.inner.local_addr, self.inner.peer_addr)) {
+                handle.outgoing.write(buf)?;
+                Ok(buf.len())
+            } else {
+                Err(Error::new(ErrorKind::Other, "Simulation context has lost TcpStream"))
+            }
         })
     }
 

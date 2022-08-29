@@ -188,11 +188,11 @@ impl TcpStream {
     pub fn try_write(&self, buf: &[u8]) -> Result<usize> {
         IOContext::with_current(|ctx| {
             if let Some(handle) = ctx.tcp_streams.get_mut(&(self.inner.local_addr, self.inner.peer_addr)) {
-                for byte in buf {
-                    handle.outgoing.push(*byte)
-                }
+                handle.outgoing.write(buf)?;
+                Ok(buf.len())
+            } else {
+                Err(Error::new(ErrorKind::Other, "Simulation context has lost TcpStream"))
             }
-            Ok(buf.len())
         })
     }
 
