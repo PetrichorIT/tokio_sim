@@ -81,8 +81,8 @@ impl SocketIncomingBuffer {
             let n = required.min(self.buffers[0].remaining());
             let start = self.buffers[0].consumed;
 
-            for i in start..(start + n) {
-                buf[offset + i] = self.buffers[0].buffer[i]
+            for i in 0..n {
+                buf[offset + i] = self.buffers[0].buffer[start + i]
             }
 
             self.buffers[0].consumed += n;
@@ -109,8 +109,8 @@ impl SocketIncomingBuffer {
             let n = required.min(buffer.remaining());
             let start = buffer.consumed;
 
-            for i in start..(start + n) {
-                buf[offset + i] = buffer.buffer[i]
+            for i in 0..n {
+                buf[offset + i] = buffer.buffer[start + i]
             }
 
             required -= n;
