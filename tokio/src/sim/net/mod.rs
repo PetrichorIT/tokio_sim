@@ -272,6 +272,17 @@ impl IOContext {
         IOCTX.with(|c| c.borrow_mut().io = Some(self))
     }
 
+    ///
+    /// Resets the context after a module restart.
+    ///
+    pub(super) fn reset(&mut self) {
+        self.intents.clear();
+        self.udp_sockets.clear();
+        self.tcp_listeners.clear();
+        self.tcp_streams.clear();
+        self.tcp_next_port = 1024;
+    }
+
     pub(crate) fn with_current<R>(f: impl FnOnce(&mut IOContext) -> R) -> R {
         use super::ctx::IOCTX;
         IOCTX.with(|c| f(c.borrow_mut().io.as_mut().expect("Missing IO Context")))
@@ -304,7 +315,7 @@ impl IOContext {
     ///
     /// Processes a UDP packet.
     ///
-    pub fn process_udp(&mut self, msg: UdpMessage) {
+    pub(crate) fn process_udp(&mut self, msg: UdpMessage) {
         let sock = msg.dest_addr;
 
         match msg.dest_addr.ip() {
@@ -333,7 +344,7 @@ impl IOContext {
     ///
     /// Processes a TCP Connection Message.
     ///
-    pub fn process_tcp_connect(&mut self, msg: TcpConnectMessage) {
+    pub(crate) fn process_tcp_connect(&mut self, msg: TcpConnectMessage) {
         match msg {
             // Server side code
             TcpConnectMessage::ClientInitiate { client, server } => {
@@ -385,7 +396,7 @@ impl IOContext {
     ///
     /// Processa a tcp packet
     ///
-    pub fn process_tcp_packet(&mut self, msg: TcpMessage) {
+    pub(crate) fn process_tcp_packet(&mut self, msg: TcpMessage) {
         if let Some(handle) = self.tcp_streams.get_mut(&(msg.dest_addr, msg.src_addr)) {
             handle.incoming.add(msg.content);
 
@@ -404,7 +415,7 @@ impl IOContext {
     ///
     /// Processes a timeout
     ///
-    pub fn process_tcp_connect_timeout(&mut self, msg: TcpConnectMessage) {
+    pub(crate) fn process_tcp_connect_timeout(&mut self, msg: TcpConnectMessage) {
         match msg {
             TcpConnectMessage::ClientInitiate { client, server } => {
                 if let Some(handle) = self.tcp_streams.get_mut(&(client, server)) {

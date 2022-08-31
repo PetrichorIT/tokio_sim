@@ -47,8 +47,14 @@ impl SimContext {
         }
     }
 
+    /// Resets the SimContext after module restart.
+    pub fn reset(&mut self) {
+        self.io.as_mut().map(|io| io.reset());
+        self.time.as_mut().map(|time| time.reset());
+    }
+
     /// Swaps out the current context
-    pub fn swap(other: &mut SimContext) {
+    pub(crate) fn swap(other: &mut SimContext) {
         IOCTX.with(|c| {
             std::mem::swap(other, &mut *c.borrow_mut());
         });

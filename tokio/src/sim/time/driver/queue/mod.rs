@@ -21,6 +21,10 @@ impl TimerQueue {
         }
     }
 
+    pub(crate) fn reset(&self) {
+        self.pending.borrow_mut().clear();
+    }
+
     pub(crate) fn push(
         self: &Arc<TimerQueue>,
         entry: TimeSlotEntry,

@@ -224,6 +224,10 @@ impl TimeContext {
         }
     }
 
+    pub(crate) fn reset(&mut self) {
+        self.queue.reset();
+    }
+
     /// An identifier for the time context. Empty string if default time context is used.
     pub fn ident(&self) -> &str {
         &self.ident[..]
