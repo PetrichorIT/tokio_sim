@@ -640,7 +640,7 @@ cfg_rt! {
     }
 
     cfg_sim! {
-        use crate::sim::{ctx::SimContext, time::SimTime};
+        use crate::sim::{ctx::SimContext, time::SimTime, net::{UdpMessage, TcpMessage, TcpConnectMessage}};
         use basic_scheduler::RuntimeIdle;
 
         ///
@@ -684,6 +684,7 @@ cfg_rt! {
             /// Creates a guard that ensures that the provided time context
             /// is active while the guard is active.
             ///
+            #[must_use]
             pub fn enter_context(&self, mut ctx: SimContext) -> SimContextGuard<'_> {
 
                 // Legacy TimeContext Swap
@@ -717,8 +718,8 @@ cfg_rt! {
             }
 
             /// Processes an arriving UDP packet.
-            #[cfg(feature = "net")]
-            pub fn process_udp(&self, msg: crate::sim::net::UdpMessage) {
+            #[must_use]
+            pub fn process_udp(&self, msg: UdpMessage) -> Result<(), UdpMessage> {
                 use crate::sim::net::IOContext;
 
                 IOContext::with_current(|ctx| {
@@ -727,8 +728,8 @@ cfg_rt! {
             }
 
             /// Processes an arriving UDP packet.
-            #[cfg(feature = "net")]
-            pub fn process_tcp_connect(&self, msg: crate::sim::net::TcpConnectMessage) {
+            #[must_use]
+            pub fn process_tcp_connect(&self, msg: TcpConnectMessage) -> Result<(), TcpConnectMessage> {
                 use crate::sim::net::IOContext;
 
                 IOContext::with_current(|ctx| {
@@ -737,8 +738,8 @@ cfg_rt! {
             }
 
             /// Processes an arriving UDP packet.
-            #[cfg(feature = "net")]
-            pub fn process_tcp_connect_timeout(&self, msg: crate::sim::net::TcpConnectMessage) {
+            #[must_use]
+            pub fn process_tcp_connect_timeout(&self, msg: TcpConnectMessage) -> Result<(), TcpConnectMessage> {
                 use crate::sim::net::IOContext;
 
                 IOContext::with_current(|ctx| {
@@ -748,8 +749,8 @@ cfg_rt! {
 
 
             /// Processes an arriving UDP packet.
-            #[cfg(feature = "net")]
-            pub fn process_tcp_packet(&self, msg: crate::sim::net::TcpMessage) {
+            #[must_use]
+            pub fn process_tcp_packet(&self, msg: TcpMessage) -> Result<(), TcpMessage> {
                 use crate::sim::net::IOContext;
 
                 IOContext::with_current(|ctx| {
@@ -758,7 +759,7 @@ cfg_rt! {
             }
 
             /// Yields all intents of the network adapter.
-            #[cfg(feature = "net")]
+            #[must_use]
             pub fn yield_intents(&self) -> Vec<crate::sim::net::IOIntent> {
                 use crate::sim::net::IOContext;
 
@@ -770,6 +771,7 @@ cfg_rt! {
             /// call of `poll_time_events`. If None no
             /// primitves has any time dependent wait behaviour.
             ///
+            #[must_use]
             pub fn next_time_poll(&self) -> Option<SimTime> {
                 let _enter = self.enter();
                 let ret = self.kind.next_time_poll();

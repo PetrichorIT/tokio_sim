@@ -315,27 +315,36 @@ impl IOContext {
     ///
     /// Processes a UDP packet.
     ///
-    pub(crate) fn process_udp(&mut self, msg: UdpMessage) {
+    pub(crate) fn process_udp(&mut self, msg: UdpMessage) -> std::result::Result<(), UdpMessage> {
         let sock = msg.dest_addr;
 
         match msg.dest_addr.ip() {
             IpAddr::V4(ip) if ip.is_broadcast() => {
-                // all socket receive
+                // all socket received
+                let mut recv = false;
                 for (_, handle) in self
                     .udp_sockets
                     .iter_mut()
                     .filter(|(k, _)| k.port() == msg.dest_addr.port())
                 {
                     handle.incoming.push_back(msg.clone());
-                    handle.interests.drain(..).for_each(|w| w.waker.wake())
+                    handle.interests.drain(..).for_each(|w| w.waker.wake());
+                    recv = true
+                }
+                if recv {
+                    Ok(())
+                } else {
+                    Err(msg)
                 }
             }
             _ => {
                 if let Some(handle) = self.udp_sockets.get_mut(&sock) {
                     handle.incoming.push_back(msg);
-                    handle.interests.drain(..).for_each(|w| w.waker.wake())
+                    handle.interests.drain(..).for_each(|w| w.waker.wake());
+                    Ok(())
                 } else {
                     println!("Dropping UDP Message :  {:?}", msg);
+                    Err(msg)
                 }
             }
         }
@@ -344,7 +353,10 @@ impl IOContext {
     ///
     /// Processes a TCP Connection Message.
     ///
-    pub(crate) fn process_tcp_connect(&mut self, msg: TcpConnectMessage) {
+    pub(crate) fn process_tcp_connect(
+        &mut self,
+        msg: TcpConnectMessage,
+    ) -> std::result::Result<(), TcpConnectMessage> {
         match msg {
             // Server side code
             TcpConnectMessage::ClientInitiate { client, server } => {
@@ -371,7 +383,10 @@ impl IOContext {
                         .push(IOIntent::TcpConnect(TcpConnectMessage::ServerAcknowledge {
                             client,
                             server,
-                        }))
+                        }));
+                    Ok(())
+                } else {
+                    Err(msg)
                 }
             }
             // Client side code
@@ -388,6 +403,9 @@ impl IOContext {
                             i += 1;
                         }
                     }
+                    Ok(())
+                } else {
+                    Err(msg)
                 }
             }
         }
@@ -396,7 +414,10 @@ impl IOContext {
     ///
     /// Processa a tcp packet
     ///
-    pub(crate) fn process_tcp_packet(&mut self, msg: TcpMessage) {
+    pub(crate) fn process_tcp_packet(
+        &mut self,
+        msg: TcpMessage,
+    ) -> std::result::Result<(), TcpMessage> {
         if let Some(handle) = self.tcp_streams.get_mut(&(msg.dest_addr, msg.src_addr)) {
             handle.incoming.add(msg.content);
 
@@ -409,13 +430,19 @@ impl IOContext {
                     i += 1;
                 }
             }
+            Ok(())
+        } else {
+            Err(msg)
         }
     }
 
     ///
     /// Processes a timeout
     ///
-    pub(crate) fn process_tcp_connect_timeout(&mut self, msg: TcpConnectMessage) {
+    pub(crate) fn process_tcp_connect_timeout(
+        &mut self,
+        msg: TcpConnectMessage,
+    ) -> std::result::Result<(), TcpConnectMessage> {
         match msg {
             TcpConnectMessage::ClientInitiate { client, server } => {
                 if let Some(handle) = self.tcp_streams.get_mut(&(client, server)) {
@@ -433,6 +460,9 @@ impl IOContext {
                             }
                         }
                     }
+                    Ok(())
+                } else {
+                    Err(msg)
                 }
             }
             _ => unreachable!(),
