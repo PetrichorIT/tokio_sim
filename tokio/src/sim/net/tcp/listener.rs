@@ -83,14 +83,19 @@ impl TcpListener {
         }
     }
 
-    /// DEPRECATED
-    #[deprecated(note = "Not implemented in simulation context")]
-    #[allow(unused)]
+    /// DIRTY IMPL
     pub fn poll_accept(
         &self,
         _cx: &mut Context<'_>
     ) -> Poll<Result<(TcpStream, SocketAddr)>> {
-        unimplemented!()
+        IOContext::with_current(|ctx| {
+            if let Ok(con) = ctx.tcp_accept(self.addr) {
+                let peer = con.inner.peer_addr;
+                Poll::Ready(Ok((con, peer)))
+            } else {
+                Poll::Pending
+            }
+        })
     }
 
     /// DEPRECATED

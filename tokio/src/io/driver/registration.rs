@@ -103,12 +103,14 @@ impl Registration {
 
     // Uses the poll path, requiring the caller to ensure mutual exclusion for
     // correctness. Only the last task to call this function is notified.
+    #[allow(unused)]
     pub(crate) fn poll_read_ready(&self, cx: &mut Context<'_>) -> Poll<io::Result<ReadyEvent>> {
         self.poll_ready(cx, Direction::Read)
     }
 
     // Uses the poll path, requiring the caller to ensure mutual exclusion for
     // correctness. Only the last task to call this function is notified.
+    #[allow(unused)]
     pub(crate) fn poll_write_ready(&self, cx: &mut Context<'_>) -> Poll<io::Result<ReadyEvent>> {
         self.poll_ready(cx, Direction::Write)
     }
@@ -175,6 +177,7 @@ impl Registration {
         }
     }
 
+    #[allow(unused)]
     pub(crate) fn try_io<R>(
         &self,
         interest: Interest,
@@ -216,6 +219,7 @@ fn gone() -> io::Error {
 
 cfg_io_readiness! {
     impl Registration {
+        #[allow(unused)]
         pub(crate) async fn readiness(&self, interest: Interest) -> io::Result<ReadyEvent> {
             use std::future::Future;
             use std::pin::Pin;
@@ -235,6 +239,7 @@ cfg_io_readiness! {
             }).await
         }
 
+        #[allow(unused)]
         pub(crate) async fn async_io<R>(&self, interest: Interest, mut f: impl FnMut() -> io::Result<R>) -> io::Result<R> {
             loop {
                 let event = self.readiness(interest).await?;

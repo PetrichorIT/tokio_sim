@@ -77,6 +77,7 @@ cfg_io_readiness! {
     }
 
     enum State {
+        #[allow(unused)]
         Init,
         Waiting,
         Done,
@@ -267,6 +268,7 @@ impl ScheduledIo {
         wakers.wake_all();
     }
 
+    #[allow(unused)]
     pub(super) fn ready_event(&self, interest: Interest) -> ReadyEvent {
         let curr = self.readiness.load(Acquire);
 
@@ -364,6 +366,7 @@ unsafe impl Sync for ScheduledIo {}
 cfg_io_readiness! {
     impl ScheduledIo {
         /// An async version of `poll_readiness` which uses a linked list of wakers.
+        #[allow(unused)]
         pub(crate) async fn readiness(&self, interest: Interest) -> ReadyEvent {
             self.readiness_fut(interest).await
         }
@@ -372,6 +375,7 @@ cfg_io_readiness! {
         // we are borrowing the `UnsafeCell` possibly over await boundaries.
         //
         // Go figure.
+        #[allow(unused)]
         fn readiness_fut(&self, interest: Interest) -> Readiness<'_> {
             Readiness {
                 scheduled_io: self,

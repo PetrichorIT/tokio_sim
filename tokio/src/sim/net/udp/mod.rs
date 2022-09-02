@@ -1,5 +1,5 @@
 use crate::io::{ReadBuf, Ready};
-use super::{addr::*, Result, IOContext, IOInterest, Interest};
+use super::{addr::*, Result, IOContext, IOInterest, IOInterestGuard, Interest};
 use std::io::{Error, ErrorKind};
 use std::net::SocketAddr;
 use std::task::*;
@@ -323,16 +323,15 @@ impl UdpSocket {
         Ok(buf.len())
     }
 
-    /// DEPRECATED
-    #[deprecated(note = "Not implemented in simulation context")]
-    #[allow(unused)]
+
+    /// DIRTY IMPL
     pub fn poll_send_to(
         &self,
-        cx: &mut Context<'_>,
+        _cx: &mut Context<'_>,
         buf: &[u8],
         target: SocketAddr
     ) -> Poll<Result<usize>> {
-        unimplemented!()
+        Poll::Ready(self.try_send_to(buf, target))
     }
 
     /// Tries to send data on the socket to the given address, 
@@ -382,15 +381,36 @@ impl UdpSocket {
         }
     }
 
-    /// DEPRECATED
-    #[deprecated(note = "Not implemented in simulation context")]
-    #[allow(unused)]
+    /// UNSURE IMPL
     pub fn poll_recv_from(
         &self,
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>
     ) -> Poll<Result<SocketAddr>> {
-        unimplemented!()
+        IOContext::with_current(|ctx| {
+            if let Some(handle) = ctx.udp_sockets.get_mut(&self.addr) {
+                if let Some(front) = handle.incoming.front_mut() {
+                    let n = buf.remaining().min(front.content.len());
+                    for _ in 0..n {
+                        buf.put_slice(&[front.content.remove(0)])
+                    }
+                    if front.content.is_empty() {
+                        let p = handle.incoming.pop_front().unwrap();
+                        Poll::Ready(Ok(p.src_addr))
+                    } else {
+                        let interest = IOInterest::UdpRead(self.addr);
+                        handle.interests.push(IOInterestGuard { interest, waker: cx.waker().clone() });
+                        Poll::Pending
+                    }
+                } else {
+                    let interest = IOInterest::UdpRead(self.addr);
+                    handle.interests.push(IOInterestGuard { interest, waker: cx.waker().clone() });
+                    Poll::Pending
+                }
+            } else {
+                Poll::Ready(Err(Error::new(ErrorKind::Other, "SimContext lost UdpSocket")))
+            }
+        })
     }
 
     /// Tries to receive a single datagram message on the socket. 

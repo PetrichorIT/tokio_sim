@@ -100,6 +100,7 @@ impl Interest {
         self.0
     }
 
+    #[allow(unused)]
     pub(super) fn mask(self) -> Ready {
         match self {
             Interest::READABLE => Ready::READABLE | Ready::READ_CLOSED,

@@ -41,10 +41,12 @@ full = [
   "time",
 ]
 
-sim = ["rt", "sync", "time", "net", "io-util"]
-
 fs = []
 io-util = ["memchr", "bytes"]
+
+sim = ["sim-prerequisits"]
+sim-prerequisits = ["rt", "sync", "time", "net", "io-util", "macros"]
+
 # stdin, stdout, stderr
 io-std = []
 macros = ["tokio-macros"]

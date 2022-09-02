@@ -14,6 +14,7 @@ mock! {
         pub fn append(&mut self, append: bool) -> &mut Self;
         pub fn create(&mut self, create: bool) -> &mut Self;
         pub fn create_new(&mut self, create_new: bool) -> &mut Self;
+        #[allow(unreachable_pub)]
         pub fn open<P: AsRef<Path> + 'static>(&self, path: P) -> io::Result<MockFile>;
         pub fn read(&mut self, read: bool) -> &mut Self;
         pub fn truncate(&mut self, truncate: bool) -> &mut Self;

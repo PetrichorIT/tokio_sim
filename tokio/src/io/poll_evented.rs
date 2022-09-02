@@ -120,6 +120,7 @@ impl<E: Source> PollEvented<E> {
         all(unix, feature = "process"),
         all(unix, feature = "signal"),
     ))]
+    #[allow(unused)]
     pub(crate) fn registration(&self) -> &Registration {
         &self.registration
     }
@@ -172,6 +173,7 @@ feature! {
         }
 
         #[cfg(feature = "net")]
+        #[allow(unused)]
         pub(crate) fn poll_write_vectored<'a>(
             &'a self,
             cx: &mut Context<'_>,
