@@ -39,7 +39,7 @@ pub use interest::*;
 
 /// Gets the mac address.
 pub fn get_mac_address() -> Result<Option<[u8; 6]>> {
-    IOContext::with_current(|ctx| {
+    IOContext::try_with_current(|ctx| {
         for interface in &ctx.interfaces {
             for addr in &interface.addrs {
                 if let InterfaceAddr::Ether { addr } = addr {
@@ -49,6 +49,7 @@ pub fn get_mac_address() -> Result<Option<[u8; 6]>> {
         }
         Ok(None)
     })
+    .unwrap_or(Err(Error::new(ErrorKind::Other, "No SimContext bound")))
 }
 
 /// Gets the ip addr

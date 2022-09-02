@@ -409,7 +409,13 @@ mod future;
 
 pub mod io;
 
-pub mod net;
+cfg_no_sim! {
+    pub mod net;
+}
+
+cfg_sim! {
+    pub use self::sim::net;
+}
 
 mod loom;
 mod park;

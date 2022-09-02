@@ -28,7 +28,7 @@ cfg_net! {
     /// Calling `TcpStream::connect("127.0.0.1:8080")` is equivalent to:
     ///
     /// ```no_run
-    /// use tokio::sim::net::TcpSocket;
+    /// use tokio::net::TcpSocket;
     ///
     /// use std::io;
     ///
@@ -47,7 +47,7 @@ cfg_net! {
     /// Calling `TcpListener::bind("127.0.0.1:8080")` is equivalent to:
     ///
     /// ```no_run
-    /// use tokio::sim::net::TcpSocket;
+    /// use tokio::net::TcpSocket;
     ///
     /// use std::io;
     ///
@@ -103,7 +103,7 @@ impl TcpSocket {
     /// Create a new IPv4 socket and start listening.
     ///
     /// ```no_run
-    /// use tokio::sim::net::TcpSocket;
+    /// use tokio::net::TcpSocket;
     ///
     /// use std::io;
     ///
@@ -136,7 +136,7 @@ impl TcpSocket {
     /// Create a new IPv6 socket and start listening.
     ///
     /// ```no_run
-    /// use tokio::sim::net::TcpSocket;
+    /// use tokio::net::TcpSocket;
     ///
     /// use std::io;
     ///
@@ -191,7 +191,7 @@ impl TcpSocket {
     /// # Examples
     ///
     /// ```no_run
-    /// use tokio::sim::net::TcpSocket;
+    /// use tokio::net::TcpSocket;
     ///
     /// use std::io;
     ///
@@ -218,7 +218,7 @@ impl TcpSocket {
     /// # Examples
     ///
     /// ```no_run
-    /// use tokio::sim::net::TcpSocket;
+    /// use tokio::net::TcpSocket;
     ///
     /// use std::io;
     ///
@@ -248,7 +248,7 @@ impl TcpSocket {
     /// # Examples
     ///
     /// ```no_run
-    /// use tokio::sim::net::TcpSocket;
+    /// use tokio::net::TcpSocket;
     ///
     /// use std::io;
     ///
@@ -282,7 +282,7 @@ impl TcpSocket {
     /// # Examples
     ///
     /// ```no_run
-    /// use tokio::sim::net::TcpSocket;
+    /// use tokio::net::TcpSocket;
     ///
     /// use std::io;
     ///
@@ -405,7 +405,7 @@ impl TcpSocket {
     /// # Examples
     ///
     /// ```no_run
-    /// use tokio::sim::net::TcpSocket;
+    /// use tokio::net::TcpSocket;
     ///
     /// use std::io;
     ///
@@ -440,7 +440,7 @@ impl TcpSocket {
     /// Bind a socket before listening.
     ///
     /// ```no_run
-    /// use tokio::sim::net::TcpSocket;
+    /// use tokio::net::TcpSocket;
     ///
     /// use std::io;
     ///
@@ -478,7 +478,7 @@ impl TcpSocket {
     /// Connecting to a peer.
     ///
     /// ```no_run
-    /// use tokio::sim::net::TcpSocket;
+    /// use tokio::net::TcpSocket;
     ///
     /// use std::io;
     ///
@@ -541,7 +541,7 @@ impl TcpSocket {
     /// Create a `TcpListener`.
     ///
     /// ```no_run
-    /// use tokio::sim::net::TcpSocket;
+    /// use tokio::net::TcpSocket;
     ///
     /// use std::io;
     ///
@@ -590,7 +590,7 @@ impl TcpSocket {
     /// # Examples
     ///
     /// ```
-    /// use tokio::sim::net::TcpSocket;
+    /// use tokio::net::TcpSocket;
     /// use socket2::{Domain, Socket, Type};
     ///
     /// #[tokio::main]

@@ -1,5 +1,7 @@
-/// SEE TIME
-pub mod time;
+cfg_time! {
+    /// SEE TIME
+    pub mod time;
+}
 
 cfg_net! {
     /// TCP/UDP/Unix bindings for `tokio` with feature `sim`.
