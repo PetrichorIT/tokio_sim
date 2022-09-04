@@ -640,7 +640,7 @@ cfg_rt! {
     }
 
     cfg_sim! {
-        use crate::sim::{ctx::SimContext, time::SimTime, net::{UdpMessage, TcpMessage, TcpConnectMessage}};
+        use crate::sim::{SimContext, time::SimTime, net::{UdpMessage, TcpMessage, TcpConnectMessage}};
         use basic_scheduler::RuntimeIdle;
 
         ///

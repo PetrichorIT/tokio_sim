@@ -13,6 +13,9 @@ pub(crate) use std::io::Result;
 pub mod interface;
 use interface::*;
 
+pub mod unix;
+pub mod windows;
+
 mod addr;
 pub use addr::*;
 

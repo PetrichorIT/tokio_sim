@@ -1,5 +1,5 @@
-use crate::io::{ReadBuf, Ready};
-use super::{addr::*, Result, IOContext, IOInterest, IOInterestGuard, Interest};
+use crate::io::{ReadBuf, Ready, Interest};
+use super::{addr::*, Result, IOContext, IOInterest, IOInterestGuard};
 use std::io::{Error, ErrorKind};
 use std::net::SocketAddr;
 use std::task::*;
@@ -30,7 +30,7 @@ UpdSOcket::recv (Mark interest, search buffers.)
 ///   and [`recv`](`UdpSocket::recv`) to communicate only with that remote address
 ///
 /// This type does not provide a `split` method, because this functionality
-/// can be achieved by instead wrapping the socket in an [`Arc`]. Note that
+/// can be achieved by instead wrapping the socket in an `Arc`. Note that
 /// you do not need a `Mutex` to share the `UdpSocket` — an `Arc<UdpSocket>`
 /// is enough. This is because all of the methods take `&self` instead of
 /// `&mut self`. Once you have wrapped it in an `Arc`, you can call
@@ -150,7 +150,7 @@ impl UdpSocket {
 
     /// Sends data on the socket to the remote address that the socket is connected to.
     /// 
-    /// The [connect] method will connect this socket to a remote address. 
+    /// The [connect](UdpSocket::connect) method will connect this socket to a remote address. 
     /// This method will fail if the socket is not connected.
     pub async fn send(&self, buf: &[u8]) -> Result<usize> {
         IOContext::with_current(|ctx| {
@@ -459,7 +459,7 @@ impl UdpSocket {
 
     /// Gets the value of the `SO_BROADCAST option for this socket.
     /// 
-    /// For more information about this option, see [set_broadcast]
+    /// For more information about this option, see [set_broadcast](UdpSocket::set_broadcast)
     pub fn broadcast(&self) -> Result<bool> {
         IOContext::with_current(|ctx| {
             match ctx.udp_sockets.get(&self.addr) {
@@ -486,7 +486,7 @@ impl UdpSocket {
 
     /// Gets the value of the IP_TTL option for this socket.
     ///
-    /// For more information about this option, see [set_ttl].
+    /// For more information about this option, see [set_ttl](UdpSocket::set_ttl).
     /// 
     pub fn ttl(&self) -> Result<u32> {
         IOContext::with_current(|ctx| {

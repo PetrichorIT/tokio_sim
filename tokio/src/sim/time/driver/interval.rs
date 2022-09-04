@@ -160,7 +160,7 @@ pub enum MissedTickBehavior {
     /// same as it would have if the ticks hadn't been delayed), which results
     /// in it firing ticks as fast as possible until it is caught up in time to
     /// where it should be. Unlike [`Delay`] and [`Skip`], the ticks yielded
-    /// when `Burst` is used (the [`Instant`]s that [`tick`](Interval::tick)
+    /// when `Burst` is used (the [`Instant`](crate::time::Instant)s that [`tick`](Interval::tick)
     /// yields) aren't different than they would have been if a tick had not
     /// been missed. Like [`Skip`], and unlike [`Delay`], the ticks may be
     /// shortened.

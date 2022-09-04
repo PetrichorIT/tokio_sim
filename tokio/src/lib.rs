@@ -347,8 +347,8 @@
 //!
 //! Likewise, some parts of the API are only available with the same flag:
 //!
-//! - [`task::JoinSet`]
-//! - [`task::Builder`]
+//! - [task::JoinSet]
+//! - [task::Builder]
 //!  
 //! This flag enables **unstable** features. The public API of these features
 //! may break in 1.x releases. To enable these features, the `--cfg
@@ -467,7 +467,6 @@ cfg_time! {
 mod util;
 
 #[cfg(feature = "sim")]
-/// Simulain utils;
 pub mod sim;
 
 /// Due to the `Stream` trait's inclusion in `std` landing later than Tokio's 1.0

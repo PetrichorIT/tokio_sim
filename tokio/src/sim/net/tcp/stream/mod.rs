@@ -1,6 +1,6 @@
-use super::super::{addr::*, Result, IOContext, IOInterest, IOInterestGuard, Interest};
+use super::super::{addr::*, Result, IOContext, IOInterest, IOInterestGuard};
 use super::TcpStreamInner;
-use crate::io::{Error, ErrorKind, Ready, ReadBuf, AsyncRead, AsyncWrite};
+use crate::io::{Error, ErrorKind, Ready, ReadBuf, AsyncRead, AsyncWrite, Interest};
 
 use std::net::SocketAddr;
 use std::task::*;
@@ -242,7 +242,7 @@ impl TcpStream {
 
     /// Gets the value of the TCP_NODELAY option on this socket.
     /// 
-    /// For more information about this option, see [set_nodelay].
+    /// For more information about this option, see [set_nodelay](TcpStream::set_nodelay).
     pub fn nodelay(&self) -> Result<bool> {
         IOContext::with_current(|ctx| {
             if let Some(handle) = ctx.tcp_streams.get(&(self.inner.local_addr, self.inner.peer_addr)) {
@@ -279,7 +279,7 @@ impl TcpStream {
 
     /// Reads the linger duration for this socket by getting the SO_LINGER option.
     /// 
-    /// For more information about this option, see [set_linger].
+    /// For more information about this option, see [set_linger](TcpStream::set_linger).
     pub fn linger(&self) -> Result<Option<Duration>> {
         IOContext::with_current(|ctx| {
             if let Some(handle) = ctx.tcp_streams.get(&(self.inner.local_addr, self.inner.peer_addr)) {
@@ -314,7 +314,7 @@ impl TcpStream {
 
     /// Gets the value of the IP_TTL option for this socket.
     /// 
-    /// For more information about this option, see [set_ttl].
+    /// For more information about this option, see [set_ttl](TcpStream::set_ttl).
     pub fn ttl(&self) -> Result<u32> {
         IOContext::with_current(|ctx| {
             if let Some(handle) = ctx.tcp_streams.get(&(self.inner.local_addr, self.inner.peer_addr)) {

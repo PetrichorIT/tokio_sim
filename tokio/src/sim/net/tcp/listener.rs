@@ -6,7 +6,7 @@ use std::task::*;
 
 /// A TCP socket server, listening for connections.
 /// 
-/// You can accept a new connection by using the [accept] method.
+/// You can accept a new connection by using the [accept](TcpListener::accept) method.
 /// 
 /// A TcpListener can be turned into a Stream with TcpListenerStream.
 /// 
@@ -116,7 +116,7 @@ impl TcpListener {
 
     /// Gets the value of the IP_TTL option for this socket.
     /// 
-    /// For more information about this option, see [set_ttl].
+    /// For more information about this option, see [set_ttl](TcpListener::set_ttl).
     pub fn ttl(&self) -> Result<u32> {
         IOContext::with_current(|ctx| {
             if let Some(handle) = ctx.tcp_listeners.get(&self.addr) {

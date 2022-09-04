@@ -1,8 +1,8 @@
 use super::super::TcpStreamInner;
 use super::TcpStream;
 
-use crate::sim::net::{IOContext, IOInterest, IOInterestGuard, Interest, Result};
-use crate::io::{Ready, ReadBuf, AsyncRead, AsyncWrite};
+use crate::sim::net::{IOContext, IOInterest, IOInterestGuard, Result};
+use crate::io::{Ready, ReadBuf, AsyncRead, AsyncWrite, Interest};
 
 use std::io::{Error, ErrorKind, IoSliceMut, IoSlice};
 use std::sync::Arc;
@@ -12,7 +12,8 @@ use std::net::SocketAddr;
 
 /// Owned read half of a [TcpStream], created by [into_split](super::TcpStream::into_split).
 ///
-/// Reading from an [OwnedReadHalf] is usually done using the convenience methods found on the [AsyncReadExt] trait.
+/// Reading from an [OwnedReadHalf] is usually done using the convenience methods 
+/// found on the [AsyncReadExt](crate::io::AsyncReadExt) trait.
 #[derive(Debug)]
 pub struct OwnedReadHalf {
     pub(super) inner: Arc<TcpStreamInner>,
@@ -20,7 +21,8 @@ pub struct OwnedReadHalf {
 
 /// Owned read half of a [TcpStream], created by [into_split](super::TcpStream::into_split).
 ///
-/// Reading from an [OwnedReadHalf] is usually done using the convenience methods found on the [AsyncReadExt] trait.
+/// Reading from an [OwnedReadHalf] is usually done using the convenience methods 
+/// found on the [AsyncReadExt](crate::io::AsyncReadExt) trait.
 #[derive(Debug)]
 pub struct OwnedWriteHalf {
     pub(super) inner: Arc<TcpStreamInner>,
@@ -34,7 +36,7 @@ pub struct ReuniteError(pub OwnedReadHalf, pub OwnedWriteHalf);
 impl OwnedReadHalf {
     /// Attempts to put the two halves of a [TcpStream] back together
     /// and recover the original socket.
-    /// Succeeds only if the two halves originated from the same call to [into_split].
+    /// Succeeds only if the two halves originated from the same call to [into_split](TcpStream::into_split).
     pub fn reunite(self, other: OwnedWriteHalf) -> std::result::Result<TcpStream, ReuniteError> {
         if Arc::ptr_eq(&self.inner, &other.inner) {
             Ok(TcpStream { inner: self.inner })
@@ -154,7 +156,7 @@ impl OwnedWriteHalf {
 
     /// Attempts to put the two halves of a [TcpStream] back together
     /// and recover the original socket.
-    /// Succeeds only if the two halves originated from the same call to [into_split].
+    /// Succeeds only if the two halves originated from the same call to [into_split](TcpStream::into_split).
     pub fn reunite(self, other: OwnedReadHalf) -> std::result::Result<TcpStream, ReuniteError> {
         if Arc::ptr_eq(&self.inner, &other.inner) {
             Ok(TcpStream { inner: self.inner })

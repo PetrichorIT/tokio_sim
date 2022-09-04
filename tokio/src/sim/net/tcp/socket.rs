@@ -116,7 +116,7 @@ impl TcpSocket {
 
     /// Reads the linger duration for this socket by getting the SO_LINGER option.
     ///
-    /// For more information about this option, see [set_linger].
+    /// For more information about this option, see [set_linger](TcpSocket::set_linger).
     pub fn linger(&self) -> Result<Option<Duration>> {
         Ok(self.config.borrow().linger)
     }

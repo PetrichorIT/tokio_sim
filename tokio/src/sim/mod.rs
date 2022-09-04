@@ -1,5 +1,7 @@
+//! A collection of changes used when feature "sim" is active.
+
 cfg_time! {
-    /// SEE TIME
+    /// Utilities for tracking time with feature `sim`.
     pub mod time;
 }
 
@@ -8,5 +10,5 @@ cfg_net! {
     pub mod net;
 }
 
-///  CTX
-pub mod ctx;
+mod ctx;
+pub use ctx::*;
