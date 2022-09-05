@@ -80,6 +80,11 @@ pub enum IOIntent {
 
     /// The intent to forward a tcp packet onto the network layer.
     TcpSendPacket(TcpMessage),
+
+    /// A indication that the context whould be reactivied once the current workload
+    /// was processed (in the next tick).
+    IoTick(),
+
     /// The intent to shut down a tcp connection
     TcpShutdown(),
 
@@ -240,6 +245,8 @@ pub struct IOContext {
     pub(self) tcp_listeners: HashMap<SocketAddr, TcpListenerHandle>,
     pub(self) tcp_streams: HashMap<(SocketAddr, SocketAddr), TcpStreamHandle>,
     pub(self) tcp_next_port: u16,
+
+    pub(self) tick_wakeups: Vec<Waker>,
 }
 
 impl IOContext {
@@ -253,6 +260,8 @@ impl IOContext {
             tcp_listeners: HashMap::new(),
             tcp_streams: HashMap::new(),
             tcp_next_port: 0,
+
+            tick_wakeups: Vec::new(),
         }
     }
 
@@ -267,6 +276,8 @@ impl IOContext {
             tcp_listeners: HashMap::new(),
             tcp_streams: HashMap::new(),
             tcp_next_port: 1024,
+
+            tick_wakeups: Vec::new(),
         }
     }
 
@@ -313,7 +324,16 @@ impl IOContext {
             }
         }
 
+        // # Check for IoTick
+        if !self.tick_wakeups.is_empty() {
+            swap.push(IOIntent::IoTick())
+        }
+
         swap
+    }
+
+    pub(crate) fn io_tick(&mut self) {
+        self.tick_wakeups.drain(..).for_each(|w| w.wake());
     }
 
     ///

@@ -758,6 +758,15 @@ cfg_rt! {
                 })
             }
 
+            /// Processes an IO tick.
+            pub fn io_tick(&self) {
+                use crate::sim::net::IOContext;
+
+                IOContext::with_current(|ctx| {
+                    ctx.io_tick()
+                })
+            }
+
             /// Yields all intents of the network adapter.
             #[must_use]
             pub fn yield_intents(&self) -> Vec<crate::sim::net::IOIntent> {

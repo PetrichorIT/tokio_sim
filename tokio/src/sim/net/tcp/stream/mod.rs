@@ -385,10 +385,22 @@ impl AsyncRead for TcpStream {
 impl AsyncWrite for TcpStream {
     fn poll_write(
         self: Pin<&mut Self>,
-        _: &mut Context<'_>,
+        cx: &mut Context<'_>,
         buf: &[u8]
     ) -> Poll<Result<usize>> {
-        Poll::Ready(self.try_write(buf))
+        IOContext::with_current(|ctx| {
+            if let Some(handle) = ctx.tcp_streams.get_mut(&(self.inner.local_addr, self.inner.peer_addr)) {
+                if let Err(_) = handle.outgoing.write(buf) {
+                    // must be exceeded buffer size
+                    ctx.tick_wakeups.push(cx.waker().clone());
+                    Poll::Pending
+                } else {
+                    Poll::Ready(Ok(buf.len()))
+                }
+            } else {
+                Poll::Ready(Err(Error::new(ErrorKind::Other, "Simulation context has lost TcpStream"))) 
+            }
+        })
     }
     fn poll_flush(
         self: Pin<&mut Self>,

@@ -138,9 +138,14 @@ impl SocketOutgoingBuffer {
     }
 
     pub(crate) fn write(&mut self, mut buf: &[u8]) -> Result<()> {
-        while buf.len() > 0 && self.limit != self.len {
+        while buf.len() > 0 && self.limit > self.len {
             let pkt = if let Some(pkt) = self.packets.last_mut() {
-                pkt
+                if pkt.len() < 1024 {
+                    pkt
+                } else {
+                    self.packets.push(Vec::with_capacity(1024));
+                    self.packets.last_mut().unwrap()
+                }
             } else {
                 self.packets.push(Vec::with_capacity(1024));
                 self.packets.last_mut().unwrap()
