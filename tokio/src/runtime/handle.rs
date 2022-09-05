@@ -26,6 +26,7 @@ pub(crate) struct HandleInner {
         not(any(feature = "net", feature = "process", all(unix, feature = "signal"))),
         allow(dead_code)
     )]
+    #[allow(unused)]
     pub(super) io_handle: driver::IoHandle,
 
     /// Handles to the signal drivers

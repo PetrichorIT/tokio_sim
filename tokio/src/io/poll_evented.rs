@@ -78,6 +78,7 @@ impl<E: Source> PollEvented<E> {
     /// from a future driven by a tokio runtime, otherwise runtime can be set
     /// explicitly with [`Runtime::enter`](crate::runtime::Runtime::enter) function.
     #[cfg_attr(feature = "signal", allow(unused))]
+    #[allow(unused)]
     pub(crate) fn new(io: E) -> io::Result<Self> {
         PollEvented::new_with_interest(io, Interest::READABLE | Interest::WRITABLE)
     }
@@ -98,10 +99,12 @@ impl<E: Source> PollEvented<E> {
     /// explicitly with [`Runtime::enter`](crate::runtime::Runtime::enter)
     /// function.
     #[cfg_attr(feature = "signal", allow(unused))]
+    #[allow(unused)]
     pub(crate) fn new_with_interest(io: E, interest: Interest) -> io::Result<Self> {
         Self::new_with_interest_and_handle(io, interest, Handle::current())
     }
 
+    #[allow(unused)]
     pub(crate) fn new_with_interest_and_handle(
         mut io: E,
         interest: Interest,
@@ -127,6 +130,7 @@ impl<E: Source> PollEvented<E> {
 
     /// Deregisters the inner io from the registration and returns a Result containing the inner io.
     #[cfg(any(feature = "net", feature = "process"))]
+    #[allow(unused)]
     pub(crate) fn into_inner(mut self) -> io::Result<E> {
         let mut inner = self.io.take().unwrap(); // As io shouldn't ever be None, just unwrap here.
         self.registration.deregister(&mut inner)?;
@@ -142,6 +146,7 @@ feature! {
 
     impl<E: Source> PollEvented<E> {
         // Safety: The caller must ensure that `E` can read into uninitialized memory
+        #[allow(unused)]
         pub(crate) unsafe fn poll_read<'a>(
             &'a self,
             cx: &mut Context<'_>,
@@ -164,6 +169,7 @@ feature! {
             Poll::Ready(Ok(()))
         }
 
+        #[allow(unused)]
         pub(crate) fn poll_write<'a>(&'a self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>>
         where
             &'a E: io::Write + 'a,

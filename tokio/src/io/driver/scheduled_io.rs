@@ -124,6 +124,7 @@ impl Default for ScheduledIo {
 }
 
 impl ScheduledIo {
+    #[allow(unused)]
     pub(crate) fn generation(&self) -> usize {
         GENERATION.unpack(self.readiness.load(Acquire))
     }

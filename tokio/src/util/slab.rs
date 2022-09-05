@@ -337,6 +337,7 @@ impl<T: Entry> Allocator<T> {
     /// Pages are allocated if necessary.
     ///
     /// Returns `None` if the slab is full.
+    #[allow(unused)]
     pub(crate) fn allocate(&self) -> Option<(Address, Ref<T>)> {
         // Find the first available slot.
         for page in &self.pages[..] {
@@ -384,6 +385,7 @@ impl<T: Entry> Page<T> {
     //
     // `self: &Arc<Page<T>>` is avoided here as this would not work with the
     // loom `Arc`.
+    #[allow(unused)]
     fn allocate(me: &Arc<Page<T>>) -> Option<(Address, Ref<T>)> {
         // Before acquiring the lock, use the `used` hint.
         if me.used.load(Relaxed) == me.len {
@@ -463,6 +465,7 @@ impl<T> Page<T> {
     }
 
     /// Returns the address for the given slot.
+    #[allow(unused)]
     fn addr(&self, slot: usize) -> Address {
         Address(slot + self.prev_len)
     }
@@ -566,6 +569,7 @@ impl<T> Slots<T> {
     }
 
     /// Generates a `Ref` for the slot at the given index. This involves bumping the page's ref count.
+    #[allow(unused)]
     fn gen_ref(&self, idx: usize, page: &Arc<Page<T>>) -> Ref<T> {
         assert!(idx < self.slots.len());
         mem::forget(page.clone());
@@ -603,6 +607,7 @@ impl Address {
         (bit::pointer_width() - slot_shifted.leading_zeros()) as usize
     }
 
+    #[allow(unused)]
     pub(crate) const fn as_usize(self) -> usize {
         self.0
     }

@@ -214,6 +214,7 @@ cfg_io_driver_impl! {
     mod poll_evented;
 
     #[cfg(not(loom))]
+    #[allow(unused)]
     pub(crate) use poll_evented::PollEvented;
 }
 

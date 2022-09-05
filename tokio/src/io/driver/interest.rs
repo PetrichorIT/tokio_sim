@@ -96,6 +96,7 @@ impl Interest {
     }
 
     // This function must be crate-private to avoid exposing a `mio` dependency.
+    #[allow(unused)]
     pub(crate) const fn to_mio(self) -> mio::Interest {
         self.0
     }

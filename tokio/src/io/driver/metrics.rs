@@ -8,6 +8,7 @@ cfg_not_rt_and_metrics_and_net! {
     #[derive(Default)]
     pub(crate) struct IoDriverMetrics {}
 
+    #[allow(unused)]
     impl IoDriverMetrics {
         pub(crate) fn incr_fd_count(&self) {}
         pub(crate) fn dec_fd_count(&self) {}

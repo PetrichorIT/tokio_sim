@@ -67,6 +67,7 @@ impl Registration {
     ///
     /// - `Ok` if the registration happened successfully
     /// - `Err` if an error was encountered during registration
+    #[allow(unused)]
     pub(crate) fn new_with_interest_and_handle(
         io: &mut impl Source,
         interest: Interest,
@@ -117,6 +118,7 @@ impl Registration {
 
     // Uses the poll path, requiring the caller to ensure mutual exclusion for
     // correctness. Only the last task to call this function is notified.
+    #[allow(unused)]
     pub(crate) fn poll_read_io<R>(
         &self,
         cx: &mut Context<'_>,
