@@ -1,5 +1,4 @@
-use super::Result;
-use crate::io::{Error, ErrorKind, ReadBuf};
+use crate::io::ReadBuf;
 use std::collections::VecDeque;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,7 +136,7 @@ impl SocketOutgoingBuffer {
         }
     }
 
-    pub(crate) fn write(&mut self, mut buf: &[u8]) -> Result<()> {
+    pub(crate) fn write<'a: 'b, 'b>(&mut self, mut buf: &'a [u8]) -> Result<(), &'b [u8]> {
         while buf.len() > 0 && self.limit > self.len {
             let pkt = if let Some(pkt) = self.packets.last_mut() {
                 if pkt.len() < 1024 {
@@ -166,10 +165,7 @@ impl SocketOutgoingBuffer {
         if buf.len() == 0 {
             Ok(())
         } else {
-            Err(Error::new(
-                ErrorKind::OutOfMemory,
-                "Send buffer size exceeded",
-            ))
+            Err(buf)
         }
     }
 

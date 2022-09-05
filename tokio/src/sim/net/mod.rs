@@ -1,3 +1,4 @@
+use super::time::SimTime;
 use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::io::{Error, ErrorKind};
@@ -79,11 +80,16 @@ pub enum IOIntent {
     TcpConnectTimeout(TcpConnectMessage, Duration),
 
     /// The intent to forward a tcp packet onto the network layer.
-    TcpSendPacket(TcpMessage),
+    ///
+    /// Contains the message and the intented send delay.
+    TcpSendPacket(TcpMessage, Duration),
 
     /// A indication that the context whould be reactivied once the current workload
     /// was processed (in the next tick).
-    IoTick(),
+    ///
+    /// The provided parameter acts as a lower bound for the io tick.
+    /// it must be smaller that the chossen delay, or the tick should be discarded,
+    IoTick(SimTime),
 
     /// The intent to shut down a tcp connection
     TcpShutdown(),
@@ -247,6 +253,7 @@ pub struct IOContext {
     pub(self) tcp_next_port: u16,
 
     pub(self) tick_wakeups: Vec<Waker>,
+    pub(self) next_io_tick: SimTime,
 }
 
 impl IOContext {
@@ -262,6 +269,7 @@ impl IOContext {
             tcp_next_port: 0,
 
             tick_wakeups: Vec::new(),
+            next_io_tick: SimTime::MIN,
         }
     }
 
@@ -278,6 +286,7 @@ impl IOContext {
             tcp_next_port: 1024,
 
             tick_wakeups: Vec::new(),
+            next_io_tick: SimTime::MIN,
         }
     }
 
@@ -313,20 +322,29 @@ impl IOContext {
         std::mem::swap(&mut swap, &mut self.intents);
 
         // # TCP message creation
+        let mut delay = Duration::ZERO;
+
         for (_, handle) in self.tcp_streams.iter_mut() {
             for packet in handle.outgoing.yield_packets() {
-                swap.push(IOIntent::TcpSendPacket(TcpMessage {
-                    content: packet,
-                    ttl: handle.config.ttl,
-                    dest_addr: handle.peer_addr,
-                    src_addr: handle.local_addr,
-                }));
+                swap.push(IOIntent::TcpSendPacket(
+                    TcpMessage {
+                        content: packet,
+                        ttl: handle.config.ttl,
+                        dest_addr: handle.peer_addr,
+                        src_addr: handle.local_addr,
+                    },
+                    delay,
+                ));
+
+                delay += Duration::from_millis(5);
             }
         }
 
         // # Check for IoTick
-        if !self.tick_wakeups.is_empty() {
-            swap.push(IOIntent::IoTick())
+        let tick_time = SimTime::now() + delay;
+        if !self.tick_wakeups.is_empty() && tick_time > self.next_io_tick {
+            swap.push(IOIntent::IoTick(tick_time));
+            self.next_io_tick = tick_time;
         }
 
         swap
@@ -334,6 +352,7 @@ impl IOContext {
 
     pub(crate) fn io_tick(&mut self) {
         self.tick_wakeups.drain(..).for_each(|w| w.wake());
+        self.next_io_tick = SimTime::MIN;
     }
 
     ///
