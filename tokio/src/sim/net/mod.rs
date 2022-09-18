@@ -43,28 +43,13 @@ pub use interest::*;
 
 /// Gets the mac address.
 pub fn get_mac_address() -> Result<Option<[u8; 6]>> {
-    IOContext::try_with_current(|ctx| {
-        for interface in &ctx.interfaces {
-            for addr in &interface.addrs {
-                if let InterfaceAddr::Ether { addr } = addr {
-                    return Ok(Some(*addr));
-                }
-            }
-        }
-        Ok(None)
-    })
-    .unwrap_or(Err(Error::new(ErrorKind::Other, "No SimContext bound")))
+    IOContext::try_with_current(|ctx| ctx.get_mac_address())
+        .unwrap_or(Err(Error::new(ErrorKind::Other, "No SimContext bound")))
 }
 
 /// Gets the ip addr
 pub fn get_ip() -> Option<IpAddr> {
-    IOContext::with_current(|ctx| {
-        let bind = ctx.bind_addr(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0));
-        match bind {
-            Ok(v) => Some(v.ip()),
-            Err(_) => None,
-        }
-    })
+    IOContext::with_current(|ctx| ctx.get_ip())
 }
 
 /// A action that must be managed by the simulation core since it supercedes
@@ -294,6 +279,27 @@ impl IOContext {
     pub fn set(self) {
         use super::ctx::IOCTX;
         IOCTX.with(|c| c.borrow_mut().io = Some(self))
+    }
+
+    /// Returns the mac address of the given IO Context.
+    pub fn get_mac_address(&mut self) -> Result<Option<[u8; 6]>> {
+        for interface in &self.interfaces {
+            for addr in &interface.addrs {
+                if let InterfaceAddr::Ether { addr } = addr {
+                    return Ok(Some(*addr));
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    /// Returns the ip of the given IO Context
+    pub fn get_ip(&mut self) -> Option<IpAddr> {
+        let bind = self.bind_addr(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0));
+        match bind {
+            Ok(v) => Some(v.ip()),
+            Err(_) => None,
+        }
     }
 
     ///

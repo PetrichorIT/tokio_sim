@@ -123,7 +123,7 @@ impl TcpSocket {
 
     /// Gets the local address of this socket.
     ///
-    /// Will fail on windows if called before bind.
+    /// Will fail on windows if called before bind
     pub fn local_addr(&self) -> Result<SocketAddr> {
         Ok(self.config.borrow().addr)
     }
