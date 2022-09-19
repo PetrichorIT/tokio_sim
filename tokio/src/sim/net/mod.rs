@@ -320,7 +320,11 @@ impl IOContext {
 
     pub(crate) fn try_with_current<R>(f: impl FnOnce(&mut IOContext) -> R) -> Option<R> {
         use super::ctx::IOCTX;
-        IOCTX.with(|c| Some(f(c.borrow_mut().io.as_mut()?)))
+        if let Ok(r) = IOCTX.try_with(|c| Some(f(c.borrow_mut().io.as_mut()?))) {
+            r
+        } else {
+            None
+        }
     }
 
     pub(crate) fn yield_intents(&mut self) -> Vec<IOIntent> {
@@ -946,6 +950,14 @@ impl TcpConnectMessage {
         match self {
             Self::ClientInitiate { server, .. } => *server,
             Self::ServerAcknowledge { client, .. } => *client,
+        }
+    }
+
+    /// The address this message was send from.
+    pub fn src(&self) -> SocketAddr {
+        match self {
+            Self::ClientInitiate { client, .. } => *client,
+            Self::ServerAcknowledge { server, .. } => *server,
         }
     }
 }
