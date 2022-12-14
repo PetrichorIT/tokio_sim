@@ -39,7 +39,6 @@ pub use tcp::socket::TcpSocket;
 pub use tcp::stream::TcpStream;
 
 mod interest;
-pub use interest::*;
 
 /// Gets the mac address.
 pub fn get_mac_address() -> Result<Option<[u8; 6]>> {
@@ -372,7 +371,7 @@ impl IOContext {
         let sock = msg.dest_addr;
 
         match msg.dest_addr.ip() {
-            IpAddr::V4(ip) if ip.is_broadcast() => {
+            IpAddr::V4(ip) if ip.is_broadcast() || ip.is_loopback() => {
                 // all socket received
                 let mut recv = false;
                 for (_, handle) in self
@@ -382,14 +381,15 @@ impl IOContext {
                 {
                     handle.incoming.push_back(msg.clone());
                     handle.interests.drain(..).for_each(|w| w.waker.wake());
-                    recv = true
+                    recv = true;
+                    if ip.is_loopback() { break }
                 }
                 if recv {
                     Ok(())
                 } else {
                     Err(msg)
                 }
-            }
+            },
             _ => {
                 if let Some(handle) = self.udp_sockets.get_mut(&sock) {
                     handle.incoming.push_back(msg);
