@@ -232,4 +232,20 @@ impl TimeContext {
     pub fn ident(&self) -> &str {
         &self.ident[..]
     }
+
+    pub fn next_time_poll(&self) -> Option<SimTime> {
+        self.queue.next_wakeup()
+    }
+
+    pub fn process_now(&self) {
+        let now = SimTime::now();
+        self.process_at(now)
+    }
+
+    pub fn process_at(&self, now: SimTime) {
+        // fetch the slot for the current timepoint.
+        for time_slot in self.queue.pop(now) {
+            time_slot.wake_all();
+        }
+    }
 }
