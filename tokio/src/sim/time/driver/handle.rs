@@ -50,6 +50,7 @@ cfg_rt! {
         /// [`Builder::enable_time`]: crate::runtime::Builder::enable_time
         /// [`Builder::enable_all`]: crate::runtime::Builder::enable_all
         #[track_caller]
+        #[allow(unused)]
         pub(crate) fn current() -> Self {
             crate::runtime::context::time_handle()
                 .expect("A Tokio 1.x context was found, but timers are disabled. Call `enable_time` on the runtime builder to enable timers.")

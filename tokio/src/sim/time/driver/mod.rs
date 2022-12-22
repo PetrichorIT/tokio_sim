@@ -105,7 +105,7 @@ impl Inner {
             state: Mutex::new(InnerState {
                 time_source,
                 ctx: TimeContext {
-                    ident: String::new(),
+                    ident: String::from("AsInner"),
                     queue: Arc::new(TimerQueue::new(SimTime::now())),
                 },
                 unpark,
@@ -229,23 +229,32 @@ impl TimeContext {
     }
 
     /// An identifier for the time context. Empty string if default time context is used.
-    pub fn ident(&self) -> &str {
-        &self.ident[..]
+    pub fn ident(&self) -> String {
+        self.ident.clone()
     }
 
+    /// next_time_poll
     pub fn next_time_poll(&self) -> Option<SimTime> {
         self.queue.next_wakeup()
     }
 
+    /// process_now
     pub fn process_now(&self) {
         let now = SimTime::now();
         self.process_at(now)
     }
 
+    /// process_at
     pub fn process_at(&self, now: SimTime) {
         // fetch the slot for the current timepoint.
         for time_slot in self.queue.pop(now) {
             time_slot.wake_all();
         }
+    }
+
+    /// swap
+    pub fn swap(&mut self, other: &mut TimeContext) {
+        std::mem::swap(&mut self.ident, &mut other.ident);
+        self.queue.swap(&other.queue)
     }
 }

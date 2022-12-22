@@ -20,9 +20,23 @@ impl TimerQueue {
             pending: RefCell::new(VecDeque::new()),
         }
     }
-
     pub(crate) fn reset(&self) {
         self.pending.borrow_mut().clear();
+    }
+
+    pub(crate) fn swap(&self, other: &TimerQueue) {
+        // current
+        let tmp = self.current.get();
+        self.current.set(other.current.get());
+        other.current.set(tmp);
+
+        // pending
+        let mut lhs = self.pending.borrow_mut();
+        let mut rhs = other.pending.borrow_mut();
+        {
+            let lhs: &mut VecDeque<Arc<TimeSlot>> = &mut *lhs;
+            std::mem::swap(lhs, &mut *rhs);
+        }
     }
 
     pub(crate) fn push(

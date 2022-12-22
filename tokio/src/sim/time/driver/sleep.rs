@@ -5,7 +5,7 @@ use std::sync::atomic::AtomicUsize;
 use std::task::{Context, Poll};
 
 use super::queue::{TimeSlotEntry, TimeSlotEntryHandle};
-use super::Handle;
+use crate::sim::SimContext;
 use crate::time::{Duration, SimTime};
 use pin_project_lite::pin_project;
 
@@ -304,13 +304,21 @@ impl Future for Sleep {
             Ordering::Greater => {
                 // Setup waker
                 // TimeDriver::with_current(|mut driver| driver.wake_sleeper(&self, cx));
-                let handle = Handle::current().get().lock().ctx.queue.push(
-                    TimeSlotEntry {
-                        id: *me.id,
-                        waker: cx.waker().clone(),
-                    },
-                    *me.deadline,
-                );
+
+                let handle = SimContext::with_current(|ctx| {
+                    let Some(tctx) = ctx.time.as_ref() else {
+                        panic!("Missing TimeContext for IO operations")
+                    };
+
+                    tctx.queue.push(
+                        TimeSlotEntry {
+                            id: *me.id,
+                            waker: cx.waker().clone(),
+                        },
+                        *me.deadline,
+                    )
+                });
+
                 *me.handle = Some(handle);
                 Poll::Pending
             }
