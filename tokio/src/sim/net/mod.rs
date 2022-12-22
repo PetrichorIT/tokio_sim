@@ -304,7 +304,7 @@ impl IOContext {
     ///
     /// Resets the context after a module restart.
     ///
-    pub(super) fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.intents.clear();
         self.udp_sockets.clear();
         self.tcp_listeners.clear();
@@ -312,12 +312,12 @@ impl IOContext {
         self.tcp_next_port = 1024;
     }
 
-    pub(crate) fn with_current<R>(f: impl FnOnce(&mut IOContext) -> R) -> R {
+    pub fn with_current<R>(f: impl FnOnce(&mut IOContext) -> R) -> R {
         use super::ctx::IOCTX;
         IOCTX.with(|c| f(c.borrow_mut().io.as_mut().expect("Missing IO Context")))
     }
 
-    pub(crate) fn try_with_current<R>(f: impl FnOnce(&mut IOContext) -> R) -> Option<R> {
+    pub fn try_with_current<R>(f: impl FnOnce(&mut IOContext) -> R) -> Option<R> {
         use super::ctx::IOCTX;
         if let Ok(r) = IOCTX.try_with(|c| Some(f(c.borrow_mut().io.as_mut()?))) {
             r
@@ -326,7 +326,7 @@ impl IOContext {
         }
     }
 
-    pub(crate) fn yield_intents(&mut self) -> Vec<IOIntent> {
+    pub fn yield_intents(&mut self) -> Vec<IOIntent> {
         let mut swap = Vec::new();
         std::mem::swap(&mut swap, &mut self.intents);
 
@@ -359,7 +359,7 @@ impl IOContext {
         swap
     }
 
-    pub(crate) fn io_tick(&mut self) {
+    pub fn io_tick(&mut self) {
         self.tick_wakeups.drain(..).for_each(|w| w.wake());
         self.next_io_tick = SimTime::MIN;
     }
@@ -367,7 +367,7 @@ impl IOContext {
     ///
     /// Processes a UDP packet.
     ///
-    pub(crate) fn process_udp(&mut self, msg: UdpMessage) -> std::result::Result<(), UdpMessage> {
+    pub fn process_udp(&mut self, msg: UdpMessage) -> std::result::Result<(), UdpMessage> {
         let sock = msg.dest_addr;
 
         match msg.dest_addr.ip() {
@@ -382,14 +382,16 @@ impl IOContext {
                     handle.incoming.push_back(msg.clone());
                     handle.interests.drain(..).for_each(|w| w.waker.wake());
                     recv = true;
-                    if ip.is_loopback() { break }
+                    if ip.is_loopback() {
+                        break;
+                    }
                 }
                 if recv {
                     Ok(())
                 } else {
                     Err(msg)
                 }
-            },
+            }
             _ => {
                 if let Some(handle) = self.udp_sockets.get_mut(&sock) {
                     handle.incoming.push_back(msg);
@@ -406,7 +408,7 @@ impl IOContext {
     ///
     /// Processes a TCP Connection Message.
     ///
-    pub(crate) fn process_tcp_connect(
+    pub fn process_tcp_connect(
         &mut self,
         msg: TcpConnectMessage,
     ) -> std::result::Result<(), TcpConnectMessage> {
@@ -467,10 +469,7 @@ impl IOContext {
     ///
     /// Processa a tcp packet
     ///
-    pub(crate) fn process_tcp_packet(
-        &mut self,
-        msg: TcpMessage,
-    ) -> std::result::Result<(), TcpMessage> {
+    pub fn process_tcp_packet(&mut self, msg: TcpMessage) -> std::result::Result<(), TcpMessage> {
         if let Some(handle) = self.tcp_streams.get_mut(&(msg.dest_addr, msg.src_addr)) {
             handle.incoming.add(msg.content);
 
@@ -492,7 +491,7 @@ impl IOContext {
     ///
     /// Processes a timeout
     ///
-    pub(crate) fn process_tcp_connect_timeout(
+    pub fn process_tcp_connect_timeout(
         &mut self,
         msg: TcpConnectMessage,
     ) -> std::result::Result<(), TcpConnectMessage> {
