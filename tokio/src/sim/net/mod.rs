@@ -312,11 +312,13 @@ impl IOContext {
         self.tcp_next_port = 1024;
     }
 
+    /// with_current
     pub fn with_current<R>(f: impl FnOnce(&mut IOContext) -> R) -> R {
         use super::ctx::IOCTX;
         IOCTX.with(|c| f(c.borrow_mut().io.as_mut().expect("Missing IO Context")))
     }
 
+    /// try_with_current
     pub fn try_with_current<R>(f: impl FnOnce(&mut IOContext) -> R) -> Option<R> {
         use super::ctx::IOCTX;
         if let Ok(r) = IOCTX.try_with(|c| Some(f(c.borrow_mut().io.as_mut()?))) {
@@ -326,6 +328,7 @@ impl IOContext {
         }
     }
 
+    /// yield_intents
     pub fn yield_intents(&mut self) -> Vec<IOIntent> {
         let mut swap = Vec::new();
         std::mem::swap(&mut swap, &mut self.intents);
@@ -359,6 +362,7 @@ impl IOContext {
         swap
     }
 
+    /// io_tick
     pub fn io_tick(&mut self) {
         self.tick_wakeups.drain(..).for_each(|w| w.wake());
         self.next_io_tick = SimTime::MIN;

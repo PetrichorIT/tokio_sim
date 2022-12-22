@@ -26,6 +26,11 @@ impl SimContext {
         }
     }
 
+    /// fetch the current context
+    pub fn with_current<R>(f: impl FnOnce(&mut SimContext) -> R) -> R {
+        IOCTX.with(|v| f(&mut *v.borrow_mut()))
+    }
+
     /// With a dummy IO Context.
     pub fn with_io(mut self) -> Self {
         self.io = Some(IOContext::empty());
