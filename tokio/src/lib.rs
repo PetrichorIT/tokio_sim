@@ -1,3 +1,4 @@
+#![feature(mutex_unpoison)]
 #![allow(
     clippy::cognitive_complexity,
     clippy::large_enum_variant,

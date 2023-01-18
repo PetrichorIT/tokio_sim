@@ -17,7 +17,13 @@ impl SimContext {
 
     /// fetch the current context
     pub fn with_current<R>(f: impl FnOnce(&mut SimContext) -> R) -> R {
-        let mut lock = SIMCTX.lock().unwrap();
+        let mut lock = match SIMCTX.lock() {
+            Ok(v) => v,
+            Err(e) => {
+                SIMCTX.clear_poison();
+                e.into_inner()
+            }
+        };
         f(&mut *lock)
     }
 
@@ -34,7 +40,13 @@ impl SimContext {
 
     /// Swaps out the current context
     pub(crate) fn swap(other: &mut SimContext) {
-        let mut lock = SIMCTX.lock().unwrap();
+        let mut lock = match SIMCTX.lock() {
+            Ok(v) => v,
+            Err(e) => {
+                SIMCTX.clear_poison();
+                e.into_inner()
+            }
+        };
         std::mem::swap(other, &mut *lock);
     }
 }
