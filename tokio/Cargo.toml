@@ -30,7 +30,6 @@ full = [
   "fs",
   "io-util",
   "io-std",
-  "macros",
   "net",
   "parking_lot",
   "process",
@@ -45,11 +44,10 @@ fs = []
 io-util = ["memchr", "bytes"]
 
 sim = ["sim-prerequisits"]
-sim-prerequisits = ["rt", "sync", "time", "net", "io-util", "macros"]
+sim-prerequisits = ["rt", "sync", "time", "net", "io-util"]
 
 # stdin, stdout, stderr
 io-std = []
-macros = ["tokio-macros"]
 net = [
   "libc",
   "mio/os-poll",
@@ -108,8 +106,6 @@ stats = []
 autocfg = "1.1"
 
 [dependencies]
-tokio-macros = {version = "1.7.0", path = "../tokio-macros", optional = true}
-
 pin-project-lite = "0.2.0"
 
 # Everything else is optional...
@@ -148,8 +144,6 @@ async-stream = "0.3"
 futures = {version = "0.3.0", features = ["async-await"]}
 mockall = "0.11.1"
 tempfile = "3.1.0"
-tokio-stream = {version = "0.1", path = "../tokio-stream"}
-tokio-test = {version = "0.4.0", path = "../tokio-test"}
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 proptest = "1"

@@ -640,7 +640,7 @@ cfg_rt! {
     }
 
     cfg_sim! {
-        use crate::sim::{SimContext, time::SimTime, net::{UdpMessage, TcpMessage, TcpConnectMessage}};
+        use crate::sim::{SimContext, time::SimTime};
         use basic_scheduler::RuntimeIdle;
 
         ///
@@ -715,64 +715,6 @@ cfg_rt! {
                 self.kind.poll_time_events();
 
                 drop(_enter)
-            }
-
-            /// Processes an arriving UDP packet.
-            #[must_use]
-            pub fn process_udp(&self, msg: UdpMessage) -> Result<(), UdpMessage> {
-                use crate::sim::net::IOContext;
-
-                IOContext::with_current(|ctx| {
-                    ctx.process_udp(msg)
-                })
-            }
-
-            /// Processes an arriving UDP packet.
-            #[must_use]
-            pub fn process_tcp_connect(&self, msg: TcpConnectMessage) -> Result<(), TcpConnectMessage> {
-                use crate::sim::net::IOContext;
-
-                IOContext::with_current(|ctx| {
-                    ctx.process_tcp_connect(msg)
-                })
-            }
-
-            /// Processes an arriving UDP packet.
-            #[must_use]
-            pub fn process_tcp_connect_timeout(&self, msg: TcpConnectMessage) -> Result<(), TcpConnectMessage> {
-                use crate::sim::net::IOContext;
-
-                IOContext::with_current(|ctx| {
-                    ctx.process_tcp_connect_timeout(msg)
-                })
-            }
-
-
-            /// Processes an arriving UDP packet.
-            #[must_use]
-            pub fn process_tcp_packet(&self, msg: TcpMessage) -> Result<(), TcpMessage> {
-                use crate::sim::net::IOContext;
-
-                IOContext::with_current(|ctx| {
-                    ctx.process_tcp_packet(msg)
-                })
-            }
-
-            /// Processes an IO tick.
-            pub fn io_tick(&self) {
-                use crate::sim::net::IOContext;
-
-                IOContext::with_current(|ctx| {
-                    ctx.io_tick()
-                })
-            }
-
-            /// Yields all intents of the network adapter.
-            #[must_use]
-            pub fn yield_intents(&self) -> Vec<crate::sim::net::IOIntent> {
-                use crate::sim::net::IOContext;
-
-                IOContext::with_current(|ctx| ctx.yield_intents())
             }
 
             ///
