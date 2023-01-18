@@ -172,6 +172,8 @@
 //! [`Builder::enable_time`]: crate::runtime::Builder::enable_time
 //! [`Builder::enable_all`]: crate::runtime::Builder::enable_all
 
+use std::task::{Context, Poll, RawWaker, Waker};
+
 // At the top due to macros
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
@@ -333,14 +335,14 @@ cfg_rt! {
             fn poll_until_idle(&self) {
                 match self {
                     Self::CurrentThread(ref sched) => sched.poll_until_idle(),
-                    _ => unreachable!()
+                    Self::ThreadPool(ref sched) => sched.poll_until_idle(),
                 }
             }
 
             fn block_or_idle_on<F: Future>(&self, f: F) -> Result<F::Output, RuntimeIdle> {
                 match self {
                     Self::CurrentThread(ref sched) => sched.block_or_idle_on(f),
-                    _ => unreachable!()
+                    Self::ThreadPool(ref _sched) => unreachable!(),
                 }
             }
         }
@@ -747,9 +749,43 @@ cfg_rt! {
             /// that this call returns an error should all tasks be idle
             /// but the future is still pending.
             ///
-            pub fn block_or_idle_on<F: Future>(&self, f: F) -> Result<F::Output, RuntimeIdle> {
+            pub fn block_or_idle_on<F: Future>(&self, f: F) -> Result<F::Output, RuntimeIdle>
+            where
+                F: Future + Send + 'static,
+                F::Output: Send + 'static,
+            {
+
                 let _enter = self.enter();
-                let ret = self.kind.block_or_idle_on(f);
+                let ret = match self.kind {
+                    Kind::CurrentThread(_) => self.kind.block_or_idle_on(f),
+                    Kind::ThreadPool(ref sched) => {
+                        let handle = self.spawn(f);
+                        sched.poll_until_idle();
+
+                        if handle.is_finished() {
+                            let waker = unsafe { Waker::from_raw(
+                                RawWaker::new(
+                                    std::ptr::null(),
+                                    &FALLBACK_VTABLE,
+                                )
+                            )};
+                            let mut cx = Context::from_waker(&waker);
+
+                            pin!(handle);
+
+                            let poll_result = handle.poll(&mut cx);
+                             match poll_result {
+                                Poll::Ready(r) => match r {
+                                    Ok(v) => Ok(v),
+                                    Err(_) => Err(RuntimeIdle::new()),
+                                },
+                                _ => Err(RuntimeIdle::new())
+                            }
+                        } else {
+                            Err(RuntimeIdle::new())
+                        }
+                    }
+                };
 
                 drop(_enter);
                 ret
@@ -792,4 +828,28 @@ cfg_rt! {
             }
         }
     }
+
+    static FALLBACK_VTABLE: std::task::RawWakerVTable = std::task::RawWakerVTable::new(
+        fallback_clone,
+        fallback_wake,
+        fallback_wake_by_ref,
+        fallback_drop
+    );
+
+    unsafe fn fallback_clone(_ptr: *const ()) -> RawWaker {
+        unreachable!()
+    }
+
+    unsafe fn  fallback_wake(_ptr: *const ()) {
+        unreachable!()
+    }
+
+    unsafe fn  fallback_wake_by_ref(_ptr: *const ()) {
+        unreachable!()
+    }
+
+    unsafe fn fallback_drop(_ptr: *const ())  {
+        /* NOP */
+    }
+
 }

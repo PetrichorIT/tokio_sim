@@ -1,11 +1,14 @@
-use std::cell::Cell;
 use std::f64::EPSILON;
 use std::fmt::*;
 use std::ops::*;
 
 use super::Duration;
 
-thread_local!(pub(crate) static SIMTIME: Cell<SimTime> = const { Cell::new(SimTime::ZERO) });
+// SAFTEY:
+// This value does not need syncronization since:
+// a) writes are only done by the simulation, thus essentially single_threaded
+// b) only reads are in async context, thus all read of RwLock semantics work.
+static mut SIMTIME: SimTime = SimTime::ZERO;
 
 ///
 /// A specific point of time in the simulation.
@@ -32,14 +35,14 @@ impl SimTime {
     /// ```
     #[must_use]
     pub fn now() -> Self {
-        SIMTIME.with(|s| s.get())
+        unsafe { SIMTIME }
     }
 
     ///
     /// Sets the current clock
     ///
     pub fn set_now(time: SimTime) {
-        SIMTIME.with(|s| s.set(time));
+        unsafe { SIMTIME = time }
     }
 
     ///

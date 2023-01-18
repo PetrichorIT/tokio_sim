@@ -72,6 +72,8 @@ use crate::util::FastRand;
 use std::cell::RefCell;
 use std::time::Duration;
 
+use super::sim::Monitor;
+
 /// A scheduler worker
 pub(super) struct Worker {
     /// Reference to shared state
@@ -129,6 +131,9 @@ struct Core {
 pub(super) struct Shared {
     /// Handle to the I/O driver, timer, blocking spawner, ...
     handle_inner: HandleInner,
+
+    /// The activity monitor for all worker
+    monitor: Monitor,
 
     /// Per-worker remote state. All other workers have access to this and is
     /// how they communicate between each other.
@@ -237,6 +242,7 @@ pub(super) fn create(
 
     let shared = Arc::new(Shared {
         handle_inner,
+        monitor: Monitor::new(size),
         remotes: remotes.into_boxed_slice(),
         inject: Inject::new(),
         idle: Idle::new(size),
@@ -389,6 +395,8 @@ fn run(worker: Arc<Worker>) {
 
 impl Context {
     fn run(&self, mut core: Box<Core>) -> RunResult {
+        self.worker.shared.monitor.activate_worker();
+
         while !core.is_shutdown {
             // Increment the tick
             core.tick();
@@ -412,6 +420,7 @@ impl Context {
             }
         }
 
+        self.worker.shared.monitor.deactivate_worker();
         core.pre_shutdown(&self.worker);
 
         // Signal shutdown
@@ -524,12 +533,16 @@ impl Context {
         // Store `core` in context
         *self.core.borrow_mut() = Some(core);
 
+        self.worker.shared.monitor.deactivate_worker();
+
         // Park thread
         if let Some(timeout) = duration {
             park.park_timeout(timeout).expect("park failed");
         } else {
             park.park().expect("park failed");
         }
+
+        self.worker.shared.monitor.activate_worker();
 
         // Remove `core` from context
         core = self.core.borrow_mut().take().expect("core missing");
@@ -725,6 +738,23 @@ impl task::Schedule for Arc<Shared> {
 impl Shared {
     pub(crate) fn as_handle_inner(&self) -> &HandleInner {
         &self.handle_inner
+    }
+
+    pub(crate) fn poll_until_idle(&self) {
+        loop {
+            self.monitor.await_idle();
+
+            let mut valid = self.owned.is_empty();
+            valid &= self.inject.is_empty();
+            for remote in self.remotes.iter() {
+                valid &= remote.steal.is_empty();
+            }
+
+            if valid {
+                break;
+            }
+            // println!("invalid break");
+        }
     }
 
     pub(super) fn bind_new_task<T>(

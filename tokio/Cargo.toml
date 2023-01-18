@@ -23,7 +23,7 @@ version = "1.19.2"
 
 [features]
 # Include nothing by default
-default = []
+default = ["sim"]
 
 # enable everything
 full = [
@@ -44,7 +44,7 @@ fs = []
 io-util = ["memchr", "bytes"]
 
 sim = ["sim-prerequisits"]
-sim-prerequisits = ["rt", "sync", "time", "net", "io-util"]
+sim-prerequisits = ["rt", "rt-multi-thread", "sync", "time", "net", "io-util"]
 
 # stdin, stdout, stderr
 io-std = []

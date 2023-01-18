@@ -1,4 +1,5 @@
 cfg_rt! {
+    #[allow(unused)]
     pub(crate) use crate::runtime::spawn_blocking;
 
     cfg_fs! {
@@ -6,6 +7,7 @@ cfg_rt! {
         pub(crate) use crate::runtime::spawn_mandatory_blocking;
     }
 
+    #[allow(unused)]
     pub(crate) use crate::task::JoinHandle;
 }
 

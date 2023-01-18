@@ -1,8 +1,6 @@
-use std::cell::RefCell;
+use std::fmt;
 
-thread_local! {
-    pub(crate) static IOCTX: RefCell<SimContext> = const { RefCell::new(SimContext::empty()) }
-}
+pub(crate) static SIMCTX: std::sync::Mutex<SimContext> = std::sync::Mutex::new(SimContext::empty());
 
 /// The IO Contexxt
 #[derive(Debug)]
@@ -19,7 +17,8 @@ impl SimContext {
 
     /// fetch the current context
     pub fn with_current<R>(f: impl FnOnce(&mut SimContext) -> R) -> R {
-        IOCTX.with(|v| f(&mut *v.borrow_mut()))
+        let mut lock = SIMCTX.lock().unwrap();
+        f(&mut *lock)
     }
 
     /// With time
@@ -35,9 +34,8 @@ impl SimContext {
 
     /// Swaps out the current context
     pub(crate) fn swap(other: &mut SimContext) {
-        IOCTX.with(|c| {
-            std::mem::swap(other, &mut *c.borrow_mut());
-        });
+        let mut lock = SIMCTX.lock().unwrap();
+        std::mem::swap(other, &mut *lock);
     }
 }
 
@@ -45,7 +43,6 @@ cfg_time! {
     use super::time::TimeContext;
 }
 
-use std::fmt;
 impl fmt::Display for SimContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "[SimContext]")?;

@@ -1,5 +1,7 @@
 //! Threadpool
 
+mod sim;
+
 mod idle;
 use self::idle::Idle;
 
@@ -88,6 +90,10 @@ impl ThreadPool {
     {
         let mut enter = crate::runtime::enter(true);
         enter.block_on(future).expect("failed to park thread")
+    }
+
+    pub(crate) fn poll_until_idle(&self) {
+        self.spawner.shared.poll_until_idle();
     }
 }
 
