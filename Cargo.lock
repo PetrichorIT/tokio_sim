@@ -897,9 +897,20 @@ dependencies = [
  "signal-hook-registry",
  "socket2",
  "tempfile",
+ "tokio-macros",
  "tracing",
  "wasm-bindgen-test",
  "winapi",
+]
+
+[[package]]
+name = "tokio-macros"
+version = "1.8.2"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+ "tokio",
 ]
 
 [[package]]
